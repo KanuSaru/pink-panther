@@ -88,6 +88,16 @@ export async function fetchPoint({ lat, lon, parameter, start }) {
   };
 }
 
+// Every listed variable for one point in a single request (the point service takes up to 20).
+export async function fetchPointAll({ lat, lon, parameters, start }) {
+  const r = await withEndYear((end) => power('point', {
+    parameters: parameters.join(','), latitude: lat.toFixed(4), longitude: lon.toFixed(4), start, end,
+  }), lastCompleteYear());
+  const dicts = r.body?.properties?.parameter;
+  if (!dicts) throw new Error('NASA POWER: unexpected response');
+  return { dicts, fill: r.body.header?.fill_value ?? -999, elevation: r.body.geometry?.coordinates?.[2], url: r.url, fetchedAt: r.fetchedAt };
+}
+
 // One request for the whole box. If the regional service refuses, sample the
 // box with individual points instead (slower and coarser, same data).
 export async function fetchRegion({ box, parameter, start, onProgress }) {

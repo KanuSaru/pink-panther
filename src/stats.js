@@ -227,3 +227,28 @@ export function benjaminiHochberg(pvals, q = 0.05) {
   for (let r = 0; r <= k; r++) out[idx[r][1]] = true;
   return out;
 }
+
+// ---------- abrupt change ----------
+
+// Pettitt (1979) test for a single change point in the median of a series.
+// `index` is the last position of the first segment; p uses Pettitt's approximation.
+export function pettitt(y) {
+  const n = y.length;
+  if (n < 8) return null;
+  let U = 0, K = 0, index = -1;
+  for (let k = 0; k < n - 1; k++) {
+    // U_k = U_{k-1} + sum_j sign(y_k - y_j)
+    for (let j = 0; j < n; j++) U += Math.sign(y[k] - y[j]);
+    if (Math.abs(U) > K) { K = Math.abs(U); index = k; }
+  }
+  if (index < 0) return { index: -1, K: 0, p: 1 };
+  return { index, K, p: Math.min(1, 2 * Math.exp((-6 * K * K) / (n ** 3 + n ** 2))) };
+}
+
+// Do two independent regression slopes differ? Normal approximation on their standard errors.
+export function slopeDifference(fitA, fitB) {
+  const se = Math.hypot(fitA.seSlope, fitB.seSlope);
+  const diff = fitB.slope - fitA.slope;
+  const z = se > 0 ? diff / se : (diff === 0 ? 0 : Infinity);
+  return { diff, z, p: 2 * (1 - normalCdf(Math.abs(z))) };
+}

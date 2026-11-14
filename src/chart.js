@@ -47,6 +47,8 @@ export function renderChart(svg, model) {
 
   let lo = Math.min(...a.anomalies), hi = Math.max(...a.anomalies);
   for (const p of proj) { lo = Math.min(lo, p.lo); hi = Math.max(hi, p.hi); }
+  const cmp = model.compare;
+  if (cmp) { lo = Math.min(lo, ...cmp.anomalies); hi = Math.max(hi, ...cmp.anomalies); }
   lo = Math.min(lo, 0); hi = Math.max(hi, 0);
   const pad = (hi - lo) * 0.06 || 1;
   lo -= pad; hi += pad;
@@ -75,6 +77,19 @@ export function renderChart(svg, model) {
     const band = proj.map((p) => `${X(p.year)},${Y(p.hi)}`).concat(proj.slice().reverse().map((p) => `${X(p.year)},${Y(p.lo)}`)).join(' ');
     svg.append(el('polygon', { points: band, fill: color, opacity: 0.22 }));
     svg.append(el('polyline', { points: proj.map((p) => `${X(p.year)},${Y(p.value)}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
+  }
+
+  // the place pinned for comparison, behind the main series
+  if (cmp) {
+    svg.append(el('polyline', { points: cmp.years.map((y, i) => `${X(y)},${Y(cmp.anomalies[i])}`).join(' '), class: 'c-cmp' }));
+    svg.append(el('line', { x1: X(cmp.period[0]), y1: Y(cmp.fit.predict(cmp.period[0])), x2: X(cmp.period[1]), y2: Y(cmp.fit.predict(cmp.period[1])), class: 'c-cmp-trend' }));
+  }
+
+  // an abrupt shift: where the level of the series changes
+  if (a.shift?.abrupt) {
+    const xs = X(a.shift.year - 0.5);
+    svg.append(el('line', { x1: xs, x2: xs, y1: m.t, y2: H - m.b, class: 'c-shift' }));
+    svg.append(el('text', { x: xs + 4, y: H - m.b - 6, class: 'c-note' }, t('chartShift', { y: a.shift.year })));
   }
 
   // observations: years outside the fitted period are drawn fainter

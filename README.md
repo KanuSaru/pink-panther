@@ -8,12 +8,12 @@ The interface is in English by default and also in Spanish (EN / ES button, or `
 
 | Challenge objective | How the tool answers |
 |---|---|
-| Select variables from missions or models | 9 NASA POWER variables (MERRA-2 reanalysis) grouped into atmosphere, water and land, each with a plain-language definition |
+| Select variables from missions or models | 9 NASA POWER variables (MERRA-2 reanalysis) grouped into atmosphere, water and land, each with a plain-language definition. For any place, "What else is changing here" tests all nine at once and ranks them, so the tool points to the variables that indicate change |
 | Visualize change over time | 3D globe with four views, an 1880–2100 timeline, and a chart of the series |
-| What and where | Analysis by point (click the globe), by region (8° × 8° box, a trend in every cell), and for the planet (eight latitude bands) |
-| How much | Theil-Sen slope per decade with confidence interval, total change over the period, first half against second half |
-| Is it significant? | Mann-Kendall test corrected for autocorrelation, t-test of the linear regression, and false discovery rate control (Benjamini-Hochberg) for regions |
-| Automatic report | "Download report" button (Markdown) with results, method, limits and the exact data URL |
+| What and where | Analysis by point (click the globe, type coordinates or use your location), by region (8° × 8° box, a trend in every cell), and for the planet (eight latitude bands). A place can be pinned and compared with another: the tool says whether the two trends differ and whether they run in opposite directions. A table shows in which months the change happens |
+| How much | Theil-Sen slope per decade with confidence interval, total change over the period (also as a share of the usual value for rain, wind and soil moisture), first half against second half, and whether the change was gradual or a step (Pettitt test) |
+| Is it significant? | Mann-Kendall test corrected for autocorrelation, t-test of the linear regression, and false discovery rate control (Benjamini-Hochberg) for regions and for the nine-variable screening |
+| Automatic report | "Download report" button (Markdown) with results, method, limits and the exact data URL; the annual series as CSV; and a link that reopens the same analysis (`?v=T2M&lat=…&lon=…&s=JJA&from=…&to=…`) |
 
 Cells of a region that are not significant are hatched, so solid colour always means robust change. One region can hold cells that rise and cells that fall, which is the case the challenge describes.
 
@@ -79,7 +79,7 @@ vercel --prod   # production
 
 ```bash
 vercel dev            # recommended: serves the page and the api/ functions
-npm test              # 15 tests of the statistics, 11 of the energy balance model
+npm test              # 20 tests of the statistics, 11 of the energy balance model
 ```
 
 Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. For a demo on an unreliable connection, `npm run snapshot` saves a copy to `data/gistemp-zonal.csv`, which the app uses as a last resort.
@@ -116,6 +116,10 @@ tests/ebm.test.mjs          tests of the energy balance model
 - Significance: Mann-Kendall with tie correction and autocorrelation correction (Yue and Wang, 2004).
 - The linear regression is reported too, with its t-test and R².
 - Unusual years: residual from the trend beyond 2 standard deviations.
+- Abrupt change: Pettitt test for one change point. A steady trend also trips this test, so the break is reported as a step only when two flat levels fit the series better than the straight line.
+- A test that passes with a slope of exactly zero (series made mostly of repeated values, such as months with no rain) is not counted as a change.
+- Screening: the same analysis for every variable at the place, ranked by total change divided by the scatter around the trend (so units do not matter), with false discovery rate control across the variables.
+- Two places: the difference between their regression slopes, tested with a normal approximation on the two standard errors.
 - Regions: one test per cell, with false discovery rate control (Benjamini-Hochberg).
 - Point and region projection: the regression line extended, with a prediction interval.
 - Planet projection: the energy balance model above.
