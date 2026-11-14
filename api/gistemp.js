@@ -6,7 +6,7 @@ const URL_ZONAL = 'https://data.giss.nasa.gov/gistemp/tabledata_v4/ZonAnn.Ts+dSS
 export default async function handler(req, res) {
   try {
     const upstream = await fetch(URL_ZONAL, {
-      headers: { 'user-agent': 'observatorio-inteligente-de-la-tierra (NASA Space Apps 2026)' },
+      headers: { 'user-agent': 'pink-panther (NASA Space Apps 2026)' },
     });
     const text = await upstream.text();
     if (!upstream.ok || !/Year\s*,/i.test(text)) return res.status(502).send('GISTEMP: unexpected response');

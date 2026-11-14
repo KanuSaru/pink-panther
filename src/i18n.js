@@ -1,7 +1,7 @@
 // SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team.
 // Interface text in Spanish and English.
 const es = {
-  title: 'Observatorio Inteligente de la Tierra',
+  title: 'Pink Panther',
   tagline: 'Elige una variable, mira cómo cambia y comprueba si el cambio es significativo.',
   what: 'Qué estudiar',
   whatNote: 'Datos mensuales de NASA POWER (reanálisis MERRA-2), desde 1981.',
@@ -98,7 +98,7 @@ const es = {
 };
 
 const en = {
-  title: 'Intelligent Earth Observatory',
+  title: 'Pink Panther',
   tagline: 'Pick a variable, watch it change, and test whether the change is significant.',
   what: 'What to study',
   whatNote: 'Monthly data from NASA POWER (MERRA-2 reanalysis), since 1981.',

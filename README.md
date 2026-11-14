@@ -1,6 +1,6 @@
-# Intelligent Earth Observatory
+# Pink Panther
 
-*Observatorio Inteligente de la Tierra.* Prototype for the NASA Space Apps Challenge 2026. A 3D globe where you pick an Earth science variable, watch it change over time, and get four answers: **what** is changing, **where**, **how much**, and whether the change is **significant**.
+Prototype for the NASA Space Apps Challenge 2026. A 3D globe where you pick an Earth science variable, watch it change over time, and get four answers: **what** is changing, **where**, **how much**, and whether the change is **significant**.
 
 The interface is in English by default and also in Spanish (EN / ES button, or `?lang=es` in the URL).
 
@@ -70,7 +70,7 @@ There is no build step: static files plus three functions in `api/`.
 
 ```bash
 npm i -g vercel
-cd observatorio-tierra
+cd pink-panther
 vercel          # preview
 vercel --prod   # production
 ```
