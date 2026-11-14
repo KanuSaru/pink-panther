@@ -5,7 +5,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const url = 'https://data.giss.nasa.gov/gistemp/tabledata_v4/ZonAnn.Ts+dSST.csv';
-const res = await fetch(url);
+// GISS closes the connection on requests without a user agent
+const res = await fetch(url, { headers: { 'user-agent': 'observatorio-inteligente-de-la-tierra (NASA Space Apps 2026)' } });
 const text = await res.text();
 if (!res.ok || !/Year\s*,/i.test(text)) throw new Error(`Unexpected response from ${url}`);
 await mkdir(new URL('../data/', import.meta.url), { recursive: true });
