@@ -2,7 +2,7 @@
 // Run: node tests/stats.test.mjs
 import assert from 'node:assert/strict';
 import * as S from '../src/stats.js';
-import { seriesFromPower, analyzeSeries, parseGistempZonal, analyzeRegion, regionTexture, niceRange } from '../src/analysis.js';
+import { seriesFromPower, analyzeSeries, parseGistempZonal, analyzeRegion, regionTexture, niceRange, screenVariables, seasonBreakdown, comparePlaces } from '../src/analysis.js';
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} expected ${b}, got ${a}`);
 let n = 0;
@@ -139,6 +139,61 @@ test('region grid: opposite significant trends inside one box', () => {
   assert.equal(tex.length, 48); assert.ok(tex[0] > 128 && tex[1] === 255 && tex[3] === 255); // SW cell warms
   assert.ok(tex[3 * 4] < 128); // SE cell cools
   assert.equal(niceRange(0.53), 1); assert.equal(niceRange(0.18), 0.2);
+});
+
+const lcg = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+const monthly = (fn) => { const d = {}; for (let y = 1981; y <= 2025; y++) for (let m = 1; m <= 12; m++) d[`${y}${String(m).padStart(2, '0')}`] = fn(y, m); return d; };
+
+test('Pettitt: finds a step and its year, stays quiet on noise', () => {
+  const rnd = lcg(21);
+  const step = [...Array(40).keys()].map((i) => (i < 22 ? 0 : 2) + rnd());
+  const pt = S.pettitt(step);
+  assert.equal(pt.index, 21); assert.ok(pt.p < 0.001);
+  // hand check, n = 8 fully separated halves: K = 4 * 4 = 16, p = 2 exp(-6*256 / (512 + 64))
+  const small = S.pettitt([1, 2, 3, 4, 11, 12, 13, 14]);
+  assert.equal(small.K, 16); assert.equal(small.index, 3); near(small.p, 2 * Math.exp(-1536 / 576), 1e-12);
+  const noise = lcg(4); assert.ok(S.pettitt([...Array(40)].map(() => noise())).p > 0.05);
+});
+
+test('analyzeSeries tells a step from a steady trend', () => {
+  const rnd = lcg(9); const years = [...Array(45).keys()].map((i) => 1981 + i);
+  const stepped = analyzeSeries(years, years.map((y) => (y < 2001 ? 10 : 12) + 0.4 * rnd()));
+  assert.ok(stepped.shift.abrupt); assert.equal(stepped.shift.year, 2001); near(stepped.shift.diff, 2, 0.2);
+  const steady = analyzeSeries(years, years.map((y) => 10 + 0.05 * (y - 1981) + 0.4 * rnd()));
+  assert.ok(steady.significant && steady.shift.significant && !steady.shift.abrupt);
+});
+
+test('screening ranks the variables that change and controls false discoveries', () => {
+  const rnd = lcg(13);
+  const dicts = {
+    A: monthly((y) => 20 + 0.04 * (y - 1981) + 0.3 * rnd()),   // clear rise
+    B: monthly(() => 5 + 2 * rnd()),                           // noise
+    C: monthly((y) => 0.6 - 0.004 * (y - 1981) + 0.02 * rnd()), // clear fall, tiny units
+    D: monthly(() => -999),                                    // no data here
+  };
+  const rows = screenVariables(dicts, ['A', 'B', 'C', 'D', 'E']);
+  assert.deepEqual(rows.map((r) => r.id).sort(), ['A', 'B', 'C']);
+  assert.equal(rows.at(-1).id, 'B'); assert.ok(!rows.at(-1).significant && !rows.at(-1).fdr);
+  const c = rows.find((r) => r.id === 'C'); assert.ok(c.significant && c.fdr && c.direction === -1);
+  assert.ok(rows[0].snr >= rows[1].snr);
+});
+
+test('season breakdown: a change confined to one season', () => {
+  const rnd = lcg(17);
+  const d = monthly((y, m) => 15 + (m >= 6 && m <= 8 ? 0.06 * (y - 1981) : 0) + 0.3 * rnd());
+  const s = seasonBreakdown(d);
+  assert.deepEqual(s.map((r) => r.season), ['DJF', 'MAM', 'JJA', 'SON']);
+  assert.ok(s[2].significant && s[2].perDecade > 0.4);
+  assert.ok(Math.abs(s[0].perDecade) < 0.15 && Math.abs(s[3].perDecade) < 0.15);
+});
+
+test('comparing two places: opposite trends are reported as opposite and different', () => {
+  const rnd = lcg(29); const years = [...Array(45).keys()].map((i) => 1981 + i);
+  const up = analyzeSeries(years, years.map((y) => 3 + 0.03 * (y - 1981) + 0.3 * rnd()));
+  const down = analyzeSeries(years, years.map((y) => 3 - 0.03 * (y - 1981) + 0.3 * rnd()));
+  const same = analyzeSeries(years, years.map((y) => 8 + 0.03 * (y - 1981) + 0.3 * rnd()));
+  const c = comparePlaces(up, down); assert.ok(c.opposite && c.differ);
+  const c2 = comparePlaces(up, same); assert.ok(!c2.opposite && !c2.differ);
 });
 
 console.log(`\n${n} tests passed`);

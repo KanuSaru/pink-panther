@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Intelligent Earth Observatory</title>
+  <title>Pink Panther</title>
   <meta name="description" content="Pick an Earth science variable, watch it change on a 3D globe, and test whether the change is statistically significant. Data from NASA POWER, GISTEMP and GIBS.">
   <meta name="theme-color" content="#000000">
   <meta name="generator" content="Code generated with Claude (Anthropic), a large language model, directed by the team. NASA Space Apps Challenge 2026 SI disclosure.">
@@ -26,7 +26,7 @@
 
   <header class="bar">
     <div class="brand">
-      <h1 data-i18n="title">Intelligent Earth Observatory</h1>
+      <h1 data-i18n="title">Pink Panther</h1>
       <p data-i18n="tagline"></p>
     </div>
     <div class="bar-actions">
@@ -67,8 +67,14 @@
       </div>
       <p class="field-error" id="coordError" role="alert" hidden></p>
       <button type="button" class="primary" id="goPoint" data-i18n="go"></button>
+      <button type="button" id="locate" data-i18n="locate"></button>
       <button type="button" id="goRegion" data-i18n="region" disabled></button>
       <p class="note" id="regionNote"></p>
+      <button type="button" id="pin" data-i18n="pin" disabled></button>
+      <div class="pin-row" id="pinRow" hidden>
+        <p class="note" id="pinNote"></p>
+        <button type="button" class="quiet" id="unpin" data-i18n="unpin"></button>
+      </div>
       <button type="button" class="quiet" id="goPlanet" data-i18n="planet"></button>
     </section>
 
@@ -150,12 +156,23 @@
         <h3 data-i18n="bands"></h3>
         <table class="bands" id="bands"></table>
       </div>
+      <div id="seasonsWrap">
+        <h3 data-i18n="seasonsTitle"></h3>
+        <table class="bands" id="seasons"></table>
+      </div>
+      <div id="screenWrap">
+        <h3 data-i18n="screenTitle"></h3>
+        <p class="note" id="screenNote"></p>
+        <table class="bands screen" id="screen"></table>
+      </div>
       <details id="detailsWrap">
         <summary data-i18n="details"></summary>
         <dl class="details" id="details"></dl>
       </details>
       <div class="actions">
         <button type="button" id="download" data-i18n="report"></button>
+        <button type="button" id="csv" data-i18n="csv"></button>
+        <button type="button" class="quiet" id="link" data-i18n="link"></button>
         <button type="button" class="quiet" id="copy" data-i18n="copy"></button>
       </div>
       <p class="note" id="sourceLine"></p>

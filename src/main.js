@@ -2,15 +2,15 @@
 // Application state and interface wiring.
 import { createGlobe } from './globe.js';
 import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POWER_FIRST_YEAR, GIBS_FIRST_YEAR, HORIZON_MAX, REGION_SIZE, SOURCES, CREDITS } from './config.js';
-import { fetchPoint, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
-import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES } from './analysis.js';
+import { fetchPoint, fetchPointAll, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
+import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES, screenVariables, seasonBreakdown, comparePlaces } from './analysis.js';
 import { mean } from './stats.js';
 import { EBM, calibrate, project } from './ebm.js';
 import { SIM_W, SIM_H } from './shaders.js';
 import { latLonToVec3, formatLatLon, boxAround, clamp } from './geo.js';
 import { renderChart } from './chart.js';
 import { describeSeries, describeRegion, buildReport } from './report.js';
-import { t, num, setLang, getLang, applyStatic } from './i18n.js';
+import { t, num, pText, setLang, getLang, applyStatic } from './i18n.js';
 import { hydrateTips, infoButton, toast, countUp, arrive } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +37,9 @@ const state = {
   gistemp: null, gistempMeta: null, gistempError: null,
   planet: null, bands: [], bandsRef: null,
   pointRaw: null, pointAnalysis: null, pointError: null,
+  allRaw: null,               // every variable at the point: { dicts, fill, key }
+  screen: null, seasons: null, // which variables change here, and in which months
+  pin: null, pinAnalysis: null, // a second place kept for comparison
   regionRaw: null, region: null, regionRange: 1,
   busy: null,
   sat: null,
@@ -76,11 +79,40 @@ function init() {
     globe.setImage('uPalette', './assets/temp_palette.png', { mipmaps: false }),
   ]).then((r) => { if (r.some((x) => x.status === 'rejected')) console.warn('Some textures failed to load', r); });
 
+  const shared = readLink();
   buildControls();
   bind();
   renderAll();
   loadPlanet();
+  if (shared) selectPoint(shared.lat, shared.lon);
   loadOcean().then((o) => { state.ocean = o; if (state.gistemp) recompute(); }).catch((e) => console.warn('Ocean mask unavailable; planet projections fall back to the trend', e));
+}
+
+// A link carries the question being asked: variable, place, months and period.
+function readLink() {
+  const q = new URLSearchParams(location.search);
+  const v = q.get('v'), s = q.get('s');
+  if (VARIABLES.some((x) => x.id === v)) state.variable = v;
+  if (['ANN', 'DJF', 'MAM', 'JJA', 'SON'].includes(s)) state.season = s;
+  const lat = parseFloat(q.get('lat')), lon = parseFloat(q.get('lon'));
+  const point = isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+  const min = point ? POWER_FIRST_YEAR : FIRST_GISTEMP;
+  const a = parseInt(q.get('from'), 10), b = parseInt(q.get('to'), 10);
+  if (isFinite(a) && isFinite(b)) {
+    const from = clamp(a, min, LAST - 8);
+    state.period = [from, clamp(b, from + 8, LAST)];
+  }
+  return point;
+}
+
+function linkFor() {
+  const q = new URLSearchParams();
+  if (getLang() !== 'en') q.set('lang', getLang());
+  q.set('v', state.variable);
+  if (state.season !== 'ANN') q.set('s', state.season);
+  if (state.point) { q.set('lat', state.point.lat); q.set('lon', state.point.lon); }
+  q.set('from', state.period[0]); q.set('to', state.period[1]);
+  return `${location.origin}${location.pathname}?${q}`;
 }
 
 function buildControls() {
@@ -171,6 +203,28 @@ function bind() {
     $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('goPoint').click(); });
   }
   $('retry').addEventListener('click', () => retryAction?.());
+  $('locate').addEventListener('click', () => {
+    if (!navigator.geolocation) { toast(t('locateFail')); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => selectPoint(pos.coords.latitude, pos.coords.longitude),
+      () => toast(t('locateFail')),
+      { timeout: 10000, maximumAge: 600000 },
+    );
+  });
+  $('pin').addEventListener('click', () => {
+    if (!state.point || !state.pointRaw) return;
+    state.pin = { point: { ...state.point }, dicts: state.allRaw?.dicts || { [state.variable]: state.pointRaw.dict }, fill: state.pointRaw.fill };
+    recompute();
+    toast(t('pinned', { x: placeLabel(state.pin.point) }));
+  });
+  $('unpin').addEventListener('click', () => { state.pin = null; recompute(); });
+  $('screen').addEventListener('click', (e) => {
+    const id = e.target.closest('button[data-var]')?.dataset.var;
+    if (!id || id === state.variable) return;
+    $('variable').value = id;
+    $('variable').dispatchEvent(new Event('change'));
+    $('findings').scrollTop = 0;
+  });
   $('goRegion').addEventListener('click', loadRegion);
   $('goPlanet').addEventListener('click', () => {
     state.scope = 'planet';
@@ -224,6 +278,18 @@ function bind() {
     a.download = `report-${state.scope}-${state.variable}-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $('csv').addEventListener('click', () => {
+    const blob = new Blob([currentCsv()], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `series-${state.scope === 'planet' ? 'planet' : state.variable}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $('link').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(linkFor()); toast(t('linkCopied')); }
+    catch { toast(t('copyFail')); }
   });
   $('copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(currentReport()); toast(t('copied')); }
@@ -340,12 +406,34 @@ let pointToken = 0;
 async function loadPoint() {
   if (!state.point) return;
   const token = ++pointToken;
-  state.busy = 'loadingPower';
+  const key = `${state.point.lat},${state.point.lon}`;
   state.pointRaw = null; state.pointAnalysis = null; state.pointError = null;
+  state.screen = null; state.seasons = null;
+  if (state.allRaw?.key !== key) state.allRaw = null;
+  // the other variables of this place are already here: no request needed
+  if (state.allRaw?.dicts[state.variable]) {
+    state.pointRaw = { ...state.allRaw, dict: state.allRaw.dicts[state.variable] };
+    state.busy = null;
+    recompute();
+    return;
+  }
+  state.busy = 'loadingPower';
   renderAll();
+  const where = { lat: state.point.lat, lon: state.point.lon, start: POWER_FIRST_YEAR };
   try {
-    const raw = await fetchPoint({ lat: state.point.lat, lon: state.point.lon, parameter: state.variable, start: POWER_FIRST_YEAR });
-    if (token !== pointToken) return;
+    let raw;
+    try {
+      // one request brings every variable, which is what lets the tool say which ones are changing here
+      const all = await fetchPointAll({ ...where, parameters: VARIABLES.map((v) => v.id) });
+      if (token !== pointToken) return;
+      if (!all.dicts[state.variable]) throw new Error('missing variable');
+      state.allRaw = { ...all, key };
+      raw = { ...all, dict: all.dicts[state.variable] };
+    } catch (e) {
+      if (token !== pointToken) return;
+      raw = await fetchPoint({ ...where, parameter: state.variable });
+      if (token !== pointToken) return;
+    }
     state.pointRaw = raw;
   } catch (e) {
     if (token !== pointToken) return;
@@ -402,8 +490,17 @@ function recompute() {
   if (state.pointRaw) {
     const s = seriesFromPower(state.pointRaw.dict, state.season, state.pointRaw.fill);
     const period = [Math.max(state.period[0], POWER_FIRST_YEAR), state.period[1]];
-    state.pointAnalysis = s.years.length ? analyzeSeries(s.years, s.values, { period, baseline: [1991, 2020], alpha: state.alpha }) : null;
+    const opts = { period, baseline: [1991, 2020], alpha: state.alpha, fill: state.pointRaw.fill };
+    state.pointAnalysis = s.years.length ? analyzeSeries(s.years, s.values, opts) : null;
     state.pointError = state.pointAnalysis ? null : t(s.years.length ? 'errShort' : 'errOcean');
+    state.seasons = seasonBreakdown(state.pointRaw.dict, opts);
+    state.screen = state.allRaw ? screenVariables(state.allRaw.dicts, VARIABLES.map((v) => v.id), { ...opts, season: state.season }) : null;
+  }
+  state.pinAnalysis = null;
+  if (state.pin?.dicts[state.variable]) {
+    const s = seriesFromPower(state.pin.dicts[state.variable], state.season, state.pin.fill);
+    const period = [Math.max(state.period[0], POWER_FIRST_YEAR), state.period[1]];
+    state.pinAnalysis = s.years.length ? analyzeSeries(s.years, s.values, { period, baseline: [1991, 2020], alpha: state.alpha }) : null;
   }
   if (state.regionRaw) {
     const period = [Math.max(state.period[0], POWER_FIRST_YEAR), state.period[1]];
@@ -523,6 +620,10 @@ function renderAll() {
     : state.model ? `${t('modelNote', { y: state.model.cal.t0, f: num(state.model.cal.F0, 2), n: num(state.model.cal.N0, 2) })}${state.model.gpu ? '' : ` ${t('modelCpu')}`}`
       : t('projNote', { y: LAST });
   $('goRegion').disabled = !state.point;
+  $('pin').disabled = !(state.scope !== 'planet' && state.pointAnalysis);
+  $('pinRow').hidden = !state.pin;
+  if (state.pin) $('pinNote').textContent = t(state.pin.dicts[state.variable] ? 'pinNote' : 'pinNoVar', { x: placeLabel(state.pin.point) });
+  history.replaceState(null, '', linkFor());
   $('goPlanet').hidden = state.scope === 'planet';
   $('exagOut').textContent = '×' + $('exag').value;
   $('places').querySelectorAll('.chip').forEach((b, i) => b.setAttribute('aria-pressed', i === state.example));
@@ -587,6 +688,21 @@ function wherePhrase() {
   return p.name ? { phrase: t('pIn', { x: p.name }), label: `${cap(p.name)} (${coords})` } : { phrase: t('pAt', { x: coords }), label: coords };
 }
 
+function placeLabel(p) {
+  return p.name || formatLatLon(p.lat, p.lon, getLang());
+}
+
+// The pinned place next to the current one, when they are different places with the same variable
+function comparison() {
+  const a = state.pointAnalysis, b = state.pinAnalysis, p = state.pin?.point;
+  if (state.scope === 'planet' || !a || !b || !p || (p.lat === state.point.lat && p.lon === state.point.lon)) return null;
+  const v = variable();
+  const f = (x) => `${num(x, v.decimals, { sign: true })}\u00a0${unitOf(v)}`;
+  const c = comparePlaces(a, b);
+  const text = `${t('cmpLine', { x: placeLabel(p), a: f(c.perDecadeB), s: t(b.significant ? 'sigYes' : 'sigNo'), b: f(c.perDecadeA) })} ${t(c.opposite ? 'cmpOpp' : c.differ ? 'cmpDiffYes' : 'cmpDiffNo', { p: pText(c.pDiff) })}`;
+  return { ...c, text, name: placeLabel(p), analysis: b };
+}
+
 function seriesContext() {
   if (state.scope === 'planet') {
     const w = wherePhrase();
@@ -595,7 +711,7 @@ function seriesContext() {
   const v = variable(), w = wherePhrase();
   return {
     name: v.name[getLang()], unit: unitOf(v), decimals: v.decimals, wherePhrase: w.phrase, whereLabel: w.label,
-    seasonLabel: state.season === 'ANN' ? null : t('s_' + state.season), palette: v.palette,
+    seasonLabel: state.season === 'ANN' ? null : t('s_' + state.season), palette: v.palette, relative: !!v.relative,
   };
 }
 
@@ -636,7 +752,9 @@ function renderFindings() {
 
   const ctx = seriesContext();
   const d = regionReady ? describeRegion(state.region, ctx) : describeSeries(analysis, ctx);
-  const verdict2 = d.verdict2 + (regionReady && state.regionRaw.sampled ? ` ${t('sampledNote', { n: state.regionRaw.features.length })}` : '');
+  const cmp = regionReady ? null : comparison();
+  const verdict2 = d.verdict2 + (regionReady && state.regionRaw.sampled ? ` ${t('sampledNote', { n: state.regionRaw.features.length })}` : '')
+    + (cmp?.opposite ? ` ${t('vCmpOpp', { x: cmp.name })}` : '');
   if (d.verdict !== shownVerdict) {
     // a new answer: count its figure up, let the panel settle in, and tell screen readers once
     shownVerdict = d.verdict;
@@ -647,7 +765,10 @@ function renderFindings() {
   $('verdict2').textContent = verdict2;
   $('verdict2').hidden = !verdict2;
   const next = modelOutlook();
-  fillDl($('facts'), next && !regionReady ? [...d.facts, [t('qNext'), next]] : d.facts, { [t('qSig')]: ['tipSig', 'qSig'] });
+  const facts = [...d.facts];
+  if (next && !regionReady) facts.push([t('qNext'), next]);
+  if (cmp) facts.push([t('qCompare'), cmp.text]);
+  fillDl($('facts'), facts, { [t('qSig')]: ['tipSig', 'qSig'] });
 
   $('chartWrap').hidden = !analysis;
   $('detailsWrap').hidden = !analysis;
@@ -656,6 +777,7 @@ function renderFindings() {
     renderChartOnly();
     const key = [['obs', t('chartObs')], ['trend', t('chartTrend')], ['proj', modelProjection(analysis) ? t('chartModel', { e: num(state.ecs, 1) }) : t('chartProj')]];
     if (analysis.unusual.length) key.push(['unusual', t('chartUnusual')]);
+    if (comparison()) key.push(['cmp', comparison().name]);
     $('chartKey').replaceChildren(...key.map(([cls, label]) => {
       const li = document.createElement('li');
       li.className = 'k-' + cls;
@@ -668,6 +790,11 @@ function renderFindings() {
 
   $('bandsWrap').hidden = state.scope !== 'planet' || !state.bands.length;
   if (!$('bandsWrap').hidden) renderBands();
+  const here = state.scope !== 'planet' && !!analysis;
+  $('seasonsWrap').hidden = !(here && state.seasons?.some(Boolean));
+  if (!$('seasonsWrap').hidden) renderSeasons();
+  $('screenWrap').hidden = !(here && state.screen?.length > 1);
+  if (!$('screenWrap').hidden) renderScreen();
 
   const src = state.scope === 'planet' ? state.gistempMeta && { ...SOURCES.gistemp, meta: state.gistempMeta }
     : regionReady ? { ...SOURCES.power, meta: state.regionRaw } : state.pointRaw && { ...SOURCES.power, meta: state.pointRaw };
@@ -703,6 +830,7 @@ function renderChartOnly() {
   renderChart($('chart'), {
     analysis, unit: ctx.unit, decimals: ctx.decimals, color: trendColor(analysis, ctx.palette), factor: state.factor,
     endYear: Math.max(2050, state.year), cursorYear: state.year, modelProj: modelProjection(analysis),
+    compare: comparison()?.analysis || null,
     baselineLabel: t('chartBase', { a: analysis.baselineUsed[0], b: analysis.baselineUsed[1] }),
     ariaLabel: $('chartTitle').textContent,
   });
@@ -730,6 +858,50 @@ function renderBands() {
     tr.append(th, bar, val, sig);
     return tr;
   }));
+}
+
+// A row of the small trend tables: label, bar, value and significance in words
+function trendRow(head, { share, color, significant, value }) {
+  const tr = document.createElement('tr');
+  const th = document.createElement('th'); th.scope = 'row'; th.append(head);
+  const bar = document.createElement('td'); bar.className = 'bar-cell';
+  const i = document.createElement('i');
+  i.style.width = share * 100 + '%';
+  i.style.background = color;
+  if (!significant) i.className = 'ns';
+  bar.append(i);
+  const val = document.createElement('td'); val.className = 'n'; val.textContent = value;
+  const sig = document.createElement('td'); sig.className = 'sig'; sig.textContent = significant ? t('sigYes') : t('sigNo');
+  tr.append(th, bar, val, sig);
+  return tr;
+}
+
+// When in the year the selected variable changes
+function renderSeasons() {
+  const v = variable();
+  const rows = state.seasons.filter(Boolean);
+  const max = Math.max(...rows.map((r) => Math.abs(r.perDecade))) || 1;
+  $('seasons').replaceChildren(...rows.map((r) => trendRow(t('sh_' + r.season), {
+    share: Math.abs(r.perDecade) / max, color: TREND_COLORS[v.palette][r.perDecade > 0 ? 'up' : 'down'], significant: r.significant,
+    value: `${num(r.perDecade, v.decimals, { sign: true })}\u00a0${unitOf(v)}`,
+  })));
+}
+
+// Every variable at this place, strongest change first; a row switches to that variable
+function renderScreen() {
+  const max = Math.max(...state.screen.map((r) => r.snr)) || 1;
+  $('screen').replaceChildren(...state.screen.map((r) => {
+    const v = VARIABLES.find((x) => x.id === r.id);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'quiet'; b.dataset.var = r.id; b.textContent = v.name[getLang()];
+    if (r.id === state.variable) b.setAttribute('aria-current', 'true');
+    return trendRow(b, {
+      share: r.snr / max, color: TREND_COLORS[v.palette][r.perDecade > 0 ? 'up' : 'down'], significant: r.significant,
+      value: `${num(r.perDecade, v.decimals, { sign: true })}\u00a0${unitOf(v)}`,
+    });
+  }));
+  const k = state.screen.filter((r) => r.significant).length;
+  $('screenNote').textContent = `${t('screenNote', { k, n: state.screen.length, s: getLang() === 'es' ? t('s_' + state.season).toLowerCase() : t('s_' + state.season) })} ${t('regionFdr', { k: state.screen.filter((r) => r.fdr).length })}`;
 }
 
 function legendBlocks(palette, range, unit, decimals) {
@@ -798,9 +970,38 @@ function currentReport() {
   if (analysis) {
     const src = state.scope === 'planet' ? { name: SOURCES.gistemp.name, url: state.gistempMeta.url } : { name: SOURCES.power.name, url: state.pointRaw.url };
     const outlook = modelOutlook();
-    sections.push({ heading: `${state.scope === 'planet' ? t('scopePlanet') : t('scopePoint')}: ${ctx.name}, ${ctx.whereLabel}`, described: describeSeries(analysis, ctx), analysis, ctx, source: src, projectionText: outlook && `**${t('qNext')}:** ${outlook}` });
+    const described = describeSeries(analysis, ctx);
+    const cmp = comparison();
+    if (cmp) described.facts.push([t('qCompare'), cmp.text]);
+    const extra = [];
+    if (state.scope !== 'planet') {
+      const v = variable();
+      const f = (r, x) => `${num(r.perDecade, x.decimals, { sign: true })} ${unitOf(x)}`;
+      const sig = (r) => t(r.significant ? 'sigYes' : 'sigNo');
+      if (state.seasons?.some(Boolean)) {
+        extra.push(`### ${t('seasonsTitle')}`, '', ...state.seasons.filter(Boolean).map((r) => `- ${t('s_' + r.season)}: ${f(r, v)} ${t('perDecade')}, ${sig(r)} (p ${pText(r.p)})`), '');
+      }
+      if (state.screen?.length > 1) {
+        extra.push(`### ${t('screenTitle')}`, '', ...state.screen.map((r) => { const x = VARIABLES.find((q) => q.id === r.id); return `- ${x.name[getLang()]}: ${f(r, x)} ${t('perDecade')}, ${sig(r)} (p ${pText(r.p)})`; }), '');
+      }
+    }
+    sections.push({ heading: `${state.scope === 'planet' ? t('scopePlanet') : t('scopePoint')}: ${ctx.name}, ${ctx.whereLabel}`, described, analysis, ctx, source: src, projectionText: outlook && `**${t('qNext')}:** ${outlook}`, extra });
   }
-  return buildReport({ sections, projectionYear: Math.max(state.year, 2050), factor: state.factor });
+  return buildReport({ sections, projectionYear: Math.max(state.year, 2050), factor: state.factor, link: linkFor() });
+}
+
+// The annual series behind the chart, so the result can be checked elsewhere
+function currentCsv() {
+  const a = state.scope === 'planet' ? state.planet : state.pointAnalysis;
+  if (!a) return '';
+  const ctx = seriesContext();
+  const src = state.scope === 'planet' ? state.gistempMeta.url : state.pointRaw.url;
+  const lines = [`# ${ctx.name}, ${ctx.whereLabel}${ctx.seasonLabel ? `, ${ctx.seasonLabel}` : ''}`, `# ${t('source')}: ${src}`, `year,value_${ctx.unit},anomaly,trend,in_fitted_period`];
+  a.years.forEach((y, i) => {
+    const inFit = y >= a.period[0] && y <= a.period[1];
+    lines.push([y, a.values[i], a.anomalies[i].toFixed(4), inFit ? a.fit.predict(y).toFixed(4) : '', inFit ? 1 : 0].join(','));
+  });
+  return lines.join('\n') + '\n';
 }
 
 init();

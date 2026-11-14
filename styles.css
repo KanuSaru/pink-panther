@@ -1,5 +1,5 @@
 /* SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team. */
-/* Observatorio Inteligente de la Tierra
+/* Pink Panther
    Flat surfaces, one typeface, and no interface colour: the only colour on screen is data. */
 
 :root {
@@ -216,6 +216,16 @@ figcaption { font-size: 0.86rem; color: var(--muted); margin-bottom: 6px; }
 .bands .bar-cell i { display: block; height: 9px; min-width: 1px; }
 .bands .bar-cell i.ns { opacity: 0.35; }
 .bands .n { text-align: right; white-space: nowrap; padding-left: 8px; }
+.screen th { white-space: normal; padding-right: 6px; }
+.screen th button { min-height: 24px; padding: 2px 0; text-align: left; font-weight: 450; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.screen th button[aria-current="true"] { font-weight: 700; text-decoration: none; color: var(--ink); }
+.screen .bar-cell { width: 20%; }
+#screenWrap .note { margin-bottom: 6px; }
+.pin-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.c-cmp { fill: none; stroke: var(--muted); stroke-width: 1.2; opacity: 0.75; }
+.c-cmp-trend { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 2 3; }
+.c-shift { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 1 3; }
+.key .k-cmp::before { width: 14px; height: 0; border-top: 1.5px solid var(--muted); }
 .bands .sig { text-align: right; color: var(--muted); font-size: 0.82rem; padding-left: 8px; }
 
 details { margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -224,7 +234,7 @@ summary { cursor: pointer; padding: 9px 0; font-weight: 550; font-size: 0.9rem; 
 .details dt { color: var(--muted); font-size: 0.82rem; margin-top: 7px; }
 .details dd { font-size: 0.86rem; }
 
-.actions { display: flex; gap: 12px; align-items: center; margin: 16px 0 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 16px 0 12px; }
 
 /* ---------- legend ---------- */
 .legend {

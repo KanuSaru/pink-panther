@@ -41,7 +41,7 @@ The tool does not stop at showing a change. It tests it: Theil-Sen slope with a 
 
 ## Brand Commitments
 
-- Name: Intelligent Earth Observatory / Observatorio Inteligente de la Tierra.
+- Name: Pink Panther (same in English and Spanish).
 - Stated in `styles.css` and binding: flat surfaces, one typeface (Instrument Sans), no interface colour. The only colour on screen is data.
 - Plain language first; the statistical terms come second and are explained.
 

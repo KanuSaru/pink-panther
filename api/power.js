@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   params.set('format', 'JSON');
   try {
     const upstream = await fetch(`https://power.larc.nasa.gov/api/temporal/monthly/${kind}?${params}`, {
-      headers: { 'user-agent': 'observatorio-inteligente-de-la-tierra (NASA Space Apps 2026)' },
+      headers: { 'user-agent': 'pink-panther (NASA Space Apps 2026)' },
     });
     const text = await upstream.text();
     res.setHeader('content-type', 'application/json; charset=utf-8');

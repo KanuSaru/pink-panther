@@ -31,6 +31,7 @@ export function paletteFloats(name) {
 }
 
 // NASA POWER parameters (monthly API, community AG; meteorology from MERRA-2, 1981 onward).
+// `relative` marks variables where a change is also worth stating as a share of the usual value.
 // `gibs` is the matching NASA GIBS imagery layer shown in the satellite view, when one exists.
 export const VARIABLES = [
   { id: 'T2M', about: { es: 'Temperatura media del aire a dos metros del suelo: la que sentimos al aire libre.', en: 'Average air temperature two meters above the ground: what we feel outdoors.' },
@@ -42,19 +43,19 @@ export const VARIABLES = [
   { id: 'T2M_MIN', about: { es: 'La temperatura más baja del aire a dos metros del suelo, promediada en el mes.', en: 'The lowest air temperature two meters above the ground, averaged over the month.' },
     group: 'atmosphere', unit: '°C', palette: 'temp', decimals: 2, gibs: 'MERRA2_2m_Air_Temperature_Monthly',
     name: { es: 'Temperatura mínima a 2 m', en: 'Minimum temperature at 2 m' } },
-  { id: 'PRECTOTCORR', about: { es: 'Lluvia y nieve que llegan a la superficie, en milímetros por día.', en: 'Rain and snow reaching the surface, in millimeters per day.' },
+  { id: 'PRECTOTCORR', relative: true, about: { es: 'Lluvia y nieve que llegan a la superficie, en milímetros por día.', en: 'Rain and snow reaching the surface, in millimeters per day.' },
     group: 'atmosphere', unit: 'mm/día', unitEn: 'mm/day', palette: 'water', decimals: 2, gibs: 'MERRA2_Precipitation_Bias_Corrected_Monthly',
     name: { es: 'Precipitación', en: 'Precipitation' } },
   { id: 'RH2M', about: { es: 'Cuánta humedad tiene el aire frente al máximo que podría contener a esa temperatura.', en: 'How much moisture the air holds compared with the most it could hold at that temperature.' },
     group: 'atmosphere', unit: '%', palette: 'water', decimals: 2, gibs: null,
     name: { es: 'Humedad relativa a 2 m', en: 'Relative humidity at 2 m' } },
-  { id: 'WS2M', about: { es: 'Velocidad media del viento a dos metros del suelo.', en: 'Average wind speed two meters above the ground.' },
+  { id: 'WS2M', relative: true, about: { es: 'Velocidad media del viento a dos metros del suelo.', en: 'Average wind speed two meters above the ground.' },
     group: 'atmosphere', unit: 'm/s', palette: 'other', decimals: 2, gibs: 'MERRA2_Surface_Wind_Speed_Monthly',
     name: { es: 'Velocidad del viento a 2 m', en: 'Wind speed at 2 m' } },
-  { id: 'GWETTOP', about: { es: 'Qué tan mojados están los primeros 5 cm del suelo: 0 es seco, 1 es saturado.', en: 'How wet the top 5 cm of soil is: 0 is dry, 1 is saturated.' },
+  { id: 'GWETTOP', relative: true, about: { es: 'Qué tan mojados están los primeros 5 cm del suelo: 0 es seco, 1 es saturado.', en: 'How wet the top 5 cm of soil is: 0 is dry, 1 is saturated.' },
     group: 'water', unit: '0–1', palette: 'water', decimals: 3, gibs: null,
     name: { es: 'Humedad superficial del suelo', en: 'Surface soil wetness' } },
-  { id: 'GWETROOT', about: { es: 'Qué tan mojado está el suelo hasta un metro de profundidad, donde beben las raíces: 0 es seco, 1 es saturado.', en: 'How wet the soil is down to one meter, where roots drink: 0 is dry, 1 is saturated.' },
+  { id: 'GWETROOT', relative: true, about: { es: 'Qué tan mojado está el suelo hasta un metro de profundidad, donde beben las raíces: 0 es seco, 1 es saturado.', en: 'How wet the soil is down to one meter, where roots drink: 0 is dry, 1 is saturated.' },
     group: 'water', unit: '0–1', palette: 'water', decimals: 3, gibs: 'MERRA2_Soil_Water_Root_Zone_Monthly',
     name: { es: 'Humedad del suelo en la zona de raíces', en: 'Root-zone soil wetness' } },
   { id: 'TS', about: { es: 'Temperatura de la propia superficie (suelo, agua o hielo), no del aire.', en: 'Temperature of the surface itself (ground, water or ice), not of the air.' },

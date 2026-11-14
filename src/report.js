@@ -15,14 +15,17 @@ export function describeSeries(a, ctx) {
   const verdict = a.significant
     ? t('vSig', { v: ctx.name, dir: t(a.direction > 0 ? 'up' : 'down'), x, p: ctx.wherePhrase })
     : t('vNo', { v: ctx.name, p: ctx.wherePhrase });
-  const verdict2 = a.significant
+  let verdict2 = a.significant
     ? t('vSig2', { p: pText(a.mk.p) })
     : t('vNo2', { x: withUnit(a.perDecade, ctx), p: pText(a.mk.p) });
+  if (a.shift?.abrupt) verdict2 += ` ${t(a.significant ? 'vShift' : 'vShiftOnly', { y: a.shift.year, p: pText(a.shift.p) })}`;
   const conf = Math.round((1 - a.alpha) * 100);
   const how = [
     `${withUnit(a.perDecade, ctx)} ${t('perDecade')} (${t('ci', { c: conf, a: num(a.perDecadeLo, ctx.decimals, { sign: true }), b: num(a.perDecadeHi, ctx.decimals, { sign: true }) })})`,
     t('total', { x: withUnit(a.change, ctx), a: a.period[0], b: a.period[1] }),
   ];
+  // for rain, wind and soil moisture the share of the usual value says more than the raw number
+  if (ctx.relative && isFinite(a.pctOfBase)) how.push(t('pctLine', { x: num(a.pctOfBase, 0, { sign: true }), a: a.baselineUsed[0], b: a.baselineUsed[1] }));
   const facts = [
     [t('qWhat'), ctx.seasonLabel ? `${ctx.name} (${inParens(ctx.seasonLabel)})` : ctx.name],
     [t('qWhere'), ctx.whereLabel],
@@ -43,6 +46,11 @@ export function describeSeries(a, ctx) {
       b: `${a.compare.b[0]}–${a.compare.b[1]}`, mb: withUnit(a.compare.meanB, ctx, false),
       d: withUnit(a.compare.diff, ctx), p: pText(a.compare.p),
     })]);
+  }
+  if (a.shift) {
+    const s = a.shift;
+    details.push([t('dShift'), !s.significant ? t('shiftNone', { p: pText(s.p) })
+      : `${t('shiftLine', { y: s.year, p: pText(s.p), a: withUnit(s.before, ctx, false), b: withUnit(s.after, ctx, false) })} ${t(s.abrupt ? 'shiftAbrupt' : 'shiftGradual')}`]);
   }
   details.push([t('dUnusual'), a.unusual.length ? a.unusual.map((u) => `${u.year} (${num(u.z, 1, { sign: true })}σ)`).join(', ') : t('none')]);
   // the figure in the headline, as written there, so the interface can count it up
@@ -69,7 +77,7 @@ export function describeRegion(r, ctx) {
 }
 
 // Markdown report. sections: [{ heading, described, analysis?, ctx, source }]
-export function buildReport({ sections, projectionYear, factor }) {
+export function buildReport({ sections, projectionYear, factor, link }) {
   const out = [];
   const now = new Date().toLocaleString(getLang(), { dateStyle: 'long', timeStyle: 'short' });
   out.push(`# ${t('title')}: ${t('rTitle').toLowerCase()}`, '', t('rGenerated', { d: now }), '');
@@ -90,8 +98,10 @@ export function buildReport({ sections, projectionYear, factor }) {
       for (const [k, v] of s.described.details) out.push(`- ${k}: ${v}`);
       out.push('');
     }
+    if (s.extra?.length) out.push(...s.extra);
     if (s.source) out.push(`${t('source')}: ${s.source.name}. ${s.source.url}`, '');
   }
+  if (link) out.push(`${t('rLink')}: ${link}`, '');
   out.push(`## ${t('rMethod')}`, '', t('rMethodBody'), '', t('rModelBody'), '', `## ${t('rCaveat')}`, '', t('rCaveatBody'), '');
   return out.join('\n');
 }

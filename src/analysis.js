@@ -1,6 +1,6 @@
 // SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team.
 // Turns raw NASA responses into series, and series into findings.
-import { mean, sd, ols, mannKendall, theilSen, welch, benjaminiHochberg, predictionHalfWidth } from './stats.js';
+import { mean, sd, ols, mannKendall, theilSen, welch, benjaminiHochberg, predictionHalfWidth, pettitt, slopeDifference } from './stats.js';
 
 export const SEASONS = {
   ANN: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -83,7 +83,8 @@ export function analyzeSeries(years, values, opts = {}) {
   const mk = mannKendall(fx, fy);
   const sen = theilSen(fx, fy, alpha, mk.varS);
   const span = fx.at(-1) - fx[0];
-  const significant = mk.p < alpha;
+  // a series made mostly of repeated values (months with no rain) can pass the test with a slope of exactly zero: that is not a change
+  const significant = mk.p < alpha && sen.slope !== 0;
   const direction = !significant ? 0 : Math.sign(sen.slope);
 
   // Unusual years: residual from the trend line beyond 2 standard deviations
@@ -100,6 +101,23 @@ export function analyzeSeries(years, values, opts = {}) {
     meanA: cmp.meanA + base, meanB: cmp.meanB + base, diff: cmp.diff, p: cmp.p,
   };
 
+  // Abrupt change: Pettitt's test finds the most likely break. A steady trend also
+  // trips it, so the break only counts as a step when two flat levels describe the
+  // series better than the straight line does.
+  let shift = null;
+  const pt = pettitt(fy);
+  if (pt && pt.index >= 2 && pt.index < fy.length - 3) {
+    const before = fy.slice(0, pt.index + 1), after = fy.slice(pt.index + 1);
+    const mb = mean(before), ma = mean(after);
+    const sseStep = before.reduce((q, v) => q + (v - mb) ** 2, 0) + after.reduce((q, v) => q + (v - ma) ** 2, 0);
+    const sseLine = resid.reduce((q, v) => q + v * v, 0);
+    shift = {
+      year: fx[pt.index + 1], p: pt.p, significant: pt.p < alpha,
+      before: mb + base, after: ma + base, diff: ma - mb,
+      abrupt: pt.p < alpha && sseStep < sseLine,
+    };
+  }
+
   const lastYear = fx.at(-1);
   const project = (year, factor = 1) => {
     const value = fit.predict(lastYear) + fit.slope * factor * (year - lastYear);
@@ -113,7 +131,45 @@ export function analyzeSeries(years, values, opts = {}) {
     perDecade: sen.slope * 10, perDecadeLo: sen.lo * 10, perDecadeHi: sen.hi * 10,
     change: sen.slope * span,
     pctOfBase: Math.abs(base) > 1e-9 ? (sen.slope * span) / Math.abs(base) * 100 : NaN,
-    unusual, compare, project,
+    // how large the change is next to the year-to-year scatter around the trend
+    snr: rs > 0 ? Math.abs(sen.slope * span) / rs : 0,
+    unusual, compare, shift, project,
+  };
+}
+
+// The same analysis for every variable at one place, to show which ones are changing.
+// dicts: { parameterId: POWER monthly dictionary }. Sorted: significant first, then by strength.
+export function screenVariables(dicts, ids, opts = {}) {
+  const { season = 'ANN', fill = -999, alpha = 0.05 } = opts;
+  const rows = [];
+  for (const id of ids) {
+    if (!dicts[id]) continue;
+    const s = seriesFromPower(dicts[id], season, fill);
+    const a = s.years.length ? analyzeSeries(s.years, s.values, opts) : null;
+    if (a) rows.push({ id, perDecade: a.perDecade, p: a.mk.p, significant: a.significant, direction: Math.sign(a.perDecade), snr: a.snr, pctOfBase: a.pctOfBase });
+  }
+  const fdr = benjaminiHochberg(rows.map((r) => r.p), alpha);
+  rows.forEach((r, i) => { r.fdr = fdr[i]; });
+  rows.sort((a, b) => (b.significant - a.significant) || (b.snr - a.snr));
+  return rows;
+}
+
+// One trend per season, to show when in the year the change happens.
+export function seasonBreakdown(dict, opts = {}) {
+  const { fill = -999 } = opts;
+  return ['DJF', 'MAM', 'JJA', 'SON'].map((season) => {
+    const s = seriesFromPower(dict, season, fill);
+    const a = s.years.length ? analyzeSeries(s.years, s.values, opts) : null;
+    return a && { season, perDecade: a.perDecade, p: a.mk.p, significant: a.significant };
+  });
+}
+
+// Two places, same variable: do they move the same way, and do the trends differ?
+export function comparePlaces(a, b) {
+  const d = slopeDifference(a.fit, b.fit);
+  return {
+    perDecadeA: a.perDecade, perDecadeB: b.perDecade, pDiff: d.p, differ: d.p < a.alpha,
+    opposite: a.significant && b.significant && a.direction * b.direction < 0,
   };
 }
 

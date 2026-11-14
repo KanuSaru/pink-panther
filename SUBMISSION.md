@@ -38,6 +38,7 @@ No NASA logos, insignia or mission identifiers are used anywhere in the project.
 - North, G. R. (1975), J. Atmos. Sci. 32, and North, G. R. and Kim, K.-Y. (2017), Energy Balance Climate Models: diffusive energy balance models on the sphere.
 - Mann, H. B. (1945) and Kendall, M. G. (1975): Mann-Kendall trend test.
 - Sen, P. K. (1968): Theil-Sen slope and its confidence interval.
+- Pettitt, A. N. (1979), Applied Statistics 28: change-point test used to tell a step from a gradual change.
 - Yue, S. and Wang, C. Y. (2004): variance correction of the Mann-Kendall test for autocorrelated series.
 - Benjamini, Y. and Hochberg, Y. (1995): false discovery rate. Wilks, D. S. (2016) on applying it to gridded fields.
 
