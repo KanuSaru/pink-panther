@@ -96,6 +96,7 @@ src/simdriver.js            steps the GPU solver towards the selected year
 src/data.js                 requests to NASA POWER, GISTEMP and GIBS
 src/analysis.js, stats.js   series, trends and significance tests
 src/chart.js, report.js     SVG chart and report
+src/ui.js                   term explanations, toast and count-up
 src/config.js               variables, examples, palettes and credits
 src/i18n.js                 English and Spanish text
 api/                        Vercel proxies (used only if the browser cannot reach NASA)

@@ -11,6 +11,7 @@ import { latLonToVec3, formatLatLon, boxAround, clamp } from './geo.js';
 import { renderChart } from './chart.js';
 import { describeSeries, describeRegion, buildReport } from './report.js';
 import { t, num, setLang, getLang, applyStatic } from './i18n.js';
+import { hydrateTips, infoButton, toast, countUp, arrive } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const LAST = lastCompleteYear();
@@ -21,6 +22,7 @@ const state = {
   variable: 'T2M',
   view: 'natural',            // natural | anomaly | temperature | satellite
   point: null,                // { lat, lon, name }
+  example: null,              // index of the worked example that is loaded, if any
   period: [POWER_FIRST_YEAR, LAST],
   season: 'ANN',
   alpha: 0.05,
@@ -91,14 +93,14 @@ function buildControls() {
     if (og.children.length) sel.append(og);
   }
   const places = $('places');
-  places.replaceChildren(...EXAMPLES.map((p) => {
+  places.replaceChildren(...EXAMPLES.map((p, i) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = p.label[getLang()];
     b.addEventListener('click', () => {
       state.variable = p.variable; state.season = p.season; state.sat = null;
       $('variable').value = p.variable; $('season').value = p.season;
       globe.set('uDivR', paletteFloats(variable().palette));
-      selectPoint(p.lat, p.lon, p.place[getLang()]);
+      selectPoint(p.lat, p.lon, p.place[getLang()], i);
       if (state.view === 'satellite') loadSat();
     });
     return b;
@@ -147,6 +149,7 @@ function bind() {
 
   $('variable').addEventListener('change', (e) => {
     state.variable = e.target.value;
+    state.example = null;
     globe.set('uDivR', paletteFloats(variable().palette));
     state.sat = null;
     if (state.scope === 'planet') { renderAll(); if (state.view === 'satellite') loadSat(); return; }
@@ -158,12 +161,21 @@ function bind() {
 
   $('goPoint').addEventListener('click', () => {
     const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
-    if (isFinite(lat) && isFinite(lon)) selectPoint(clamp(lat, -90, 90), clamp(lon, -180, 180));
+    const badLat = !isFinite(lat) || Math.abs(lat) > 90, badLon = !isFinite(lon) || Math.abs(lon) > 180;
+    coordError(badLat, badLon);
+    if (badLat || badLon) { $(badLat ? 'lat' : 'lon').focus(); return; }
+    selectPoint(lat, lon);
   });
+  for (const id of ['lat', 'lon']) {
+    $(id).addEventListener('input', () => coordError(false, false));
+    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('goPoint').click(); });
+  }
+  $('retry').addEventListener('click', () => retryAction?.());
   $('goRegion').addEventListener('click', loadRegion);
   $('goPlanet').addEventListener('click', () => {
     state.scope = 'planet';
     state.point = null;
+    state.example = null;
     clearRegion();
     globe.set('uMarkerOn', 0);
     globe.zoomOut();
@@ -180,7 +192,7 @@ function bind() {
   };
   $('from').addEventListener('change', onPeriod);
   $('to').addEventListener('change', onPeriod);
-  $('season').addEventListener('change', (e) => { state.season = e.target.value; recompute(); });
+  $('season').addEventListener('change', (e) => { state.season = e.target.value; state.example = null; recompute(); });
   $('alpha').addEventListener('change', (e) => { state.alpha = parseFloat(e.target.value); recompute(); });
 
   $('view').addEventListener('click', (e) => {
@@ -214,9 +226,8 @@ function bind() {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
   $('copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(currentReport()); $('copy').textContent = t('copied'); }
-    catch { /* clipboard unavailable: the download button still works */ }
-    setTimeout(() => { $('copy').textContent = t('copy'); }, 1800);
+    try { await navigator.clipboard.writeText(currentReport()); toast(t('copied')); }
+    catch { toast(t('copyFail')); }
   });
 }
 
@@ -309,9 +320,11 @@ async function loadPlanet() {
   recompute();
 }
 
-function selectPoint(lat, lon, name) {
+function selectPoint(lat, lon, name, example = null) {
   state.point = { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100, name: name || null };
+  state.example = example;
   state.scope = 'point';
+  coordError(false, false);
   clearRegion();
   $('lat').value = state.point.lat;
   $('lon').value = state.point.lon;
@@ -353,7 +366,7 @@ async function loadRegion() {
   try {
     const raw = await fetchRegion({
       box, parameter: state.variable, start: POWER_FIRST_YEAR,
-      onProgress: (a, b) => { if (token === regionToken) showStatus(t('sampling', { a, b })); },
+      onProgress: (a, b) => { if (token === regionToken) showStatus(t('sampling', { a, b }), { busy: true, progress: a / b }); },
     });
     if (token !== regionToken) return;
     state.regionRaw = raw;
@@ -365,7 +378,7 @@ async function loadRegion() {
     state.busy = null;
     state.scope = 'point';
     renderAll();
-    showStatus(t('errPower', { m: e.message || e }));
+    showStatus(t('errPower', { m: e.message || e }), { retry: loadRegion });
   }
 }
 
@@ -512,6 +525,9 @@ function renderAll() {
   $('goRegion').disabled = !state.point;
   $('goPlanet').hidden = state.scope === 'planet';
   $('exagOut').textContent = '×' + $('exag').value;
+  $('places').querySelectorAll('.chip').forEach((b, i) => b.setAttribute('aria-pressed', i === state.example));
+  if (!$('coordError').hidden) $('coordError').textContent = t('errCoords');
+  hydrateTips();
   renderViewControls();
   renderYear();
   renderFindings();
@@ -523,6 +539,8 @@ function renderViewControls() {
     b.setAttribute('aria-pressed', b.dataset.view === state.view);
     b.disabled = !state.gistemp && (b.dataset.view === 'anomaly' || b.dataset.view === 'temperature');
   });
+  // the natural view has no options of its own
+  $('viewSection').hidden = state.view === 'natural' && !state.region;
   $('viewHint').textContent = t('vh_' + state.view);
   $('scaleRow').hidden = state.view !== 'anomaly';
   $('monthRow').hidden = state.view !== 'satellite';
@@ -540,9 +558,25 @@ function renderYear() {
   $('play').setAttribute('aria-label', $('play').title);
 }
 
-function showStatus(msg) {
-  $('status').textContent = msg;
+// One status line for waiting and for failures. `busy` shows a progress bar
+// (determinate when `progress` is a 0-1 fraction); `retry` offers the action again.
+let retryAction = null;
+function showStatus(msg, { busy = false, progress = null, retry = null } = {}) {
+  $('statusText').textContent = msg;
   $('status').hidden = !msg;
+  $('progress').hidden = !busy;
+  $('progress').classList.toggle('determinate', progress != null);
+  $('progress').style.setProperty('--p', progress ?? 0);
+  retryAction = retry;
+  $('retry').hidden = !retry;
+  $('findings').setAttribute('aria-busy', String(busy));
+}
+
+function coordError(badLat, badLon) {
+  $('lat').setAttribute('aria-invalid', String(badLat));
+  $('lon').setAttribute('aria-invalid', String(badLon));
+  $('coordError').hidden = !(badLat || badLon);
+  $('coordError').textContent = badLat || badLon ? t('errCoords') : '';
 }
 
 function wherePhrase() {
@@ -570,13 +604,18 @@ function trendColor(a, palette) {
   return TREND_COLORS[palette][a.direction > 0 ? 'up' : 'down'];
 }
 
-function fillDl(dl, rows) {
+// `tips` maps a row label to the [explanation key, label key] of its info button
+function fillDl(dl, rows, tips = {}) {
   dl.replaceChildren(...rows.flatMap(([k, v]) => {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v;
+    if (tips[k]) { dt.className = 'with-info'; dt.append(infoButton(...tips[k])); }
     return [dt, dd];
   }));
+  hydrateTips(dl);
 }
+
+let shownVerdict = null;
 
 function renderFindings() {
   const scopeText = { planet: t('scopePlanet'), point: t('scopePoint'), region: t('scopeRegion') }[state.scope];
@@ -586,19 +625,29 @@ function renderFindings() {
   const error = state.scope === 'planet' ? (state.gistempError && t('errGistemp', { m: state.gistempError })) : state.pointError;
   const regionReady = state.scope === 'region' && state.region;
 
-  if (state.busy) { showStatus(t(state.busy)); }
-  else if (error && !regionReady) { showStatus(error); }
+  // a failed request can be repeated; too few years or no data at the point cannot
+  const retry = state.scope === 'planet' ? (!state.gistemp && loadPlanet) : (!state.pointRaw && loadPoint);
+  if (state.busy) { showStatus(t(state.busy), { busy: true }); }
+  else if (error && !regionReady) { showStatus(error, { retry: retry || null }); }
   else showStatus('');
   $('result').hidden = !(analysis || regionReady) || (!!state.busy && !analysis);
-  if ($('result').hidden) return;
+  $('skeleton').hidden = !(state.busy && $('result').hidden);
+  if ($('result').hidden) { shownVerdict = null; return; }
 
   const ctx = seriesContext();
   const d = regionReady ? describeRegion(state.region, ctx) : describeSeries(analysis, ctx);
-  $('verdict').textContent = d.verdict;
-  $('verdict2').textContent = d.verdict2 + (regionReady && state.regionRaw.sampled ? ` ${t('sampledNote', { n: state.regionRaw.features.length })}` : '');
-  $('verdict2').hidden = !$('verdict2').textContent;
+  const verdict2 = d.verdict2 + (regionReady && state.regionRaw.sampled ? ` ${t('sampledNote', { n: state.regionRaw.features.length })}` : '');
+  if (d.verdict !== shownVerdict) {
+    // a new answer: count its figure up, let the panel settle in, and tell screen readers once
+    shownVerdict = d.verdict;
+    countUp($('verdict'), d.verdict, d.verdictNumber);
+    arrive($('result'));
+    $('announce').textContent = `${d.verdict} ${verdict2}`;
+  }
+  $('verdict2').textContent = verdict2;
+  $('verdict2').hidden = !verdict2;
   const next = modelOutlook();
-  fillDl($('facts'), next && !regionReady ? [...d.facts, [t('qNext'), next]] : d.facts);
+  fillDl($('facts'), next && !regionReady ? [...d.facts, [t('qNext'), next]] : d.facts, { [t('qSig')]: ['tipSig', 'qSig'] });
 
   $('chartWrap').hidden = !analysis;
   $('detailsWrap').hidden = !analysis;

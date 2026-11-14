@@ -25,7 +25,7 @@ function niceTicks(lo, hi, count = 5) {
 // model: { analysis, unit, decimals, color, factor, endYear, cursorYear, baselineLabel }
 export function renderChart(svg, model) {
   const { analysis: a, unit, color, factor, cursorYear } = model;
-  const W = 380, H = 230, m = { l: 44, r: 12, t: 14, b: 26 };
+  const W = 380, H = 250, m = { l: 48, r: 12, t: 18, b: 30 };
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.replaceChildren();
 
@@ -59,13 +59,13 @@ export function renderChart(svg, model) {
   // grid and axes
   for (const v of ticks) {
     svg.append(el('line', { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), class: v === 0 ? 'c-zero' : 'c-grid' }));
-    svg.append(el('text', { x: m.l - 6, y: Y(v) + 3.5, class: 'c-tick', 'text-anchor': 'end' }, num(v, dec, { sign: true })));
+    svg.append(el('text', { x: m.l - 6, y: Y(v) + 4, class: 'c-tick', 'text-anchor': 'end' }, num(v, dec, { sign: true })));
   }
   const spanY = y1 - y0;
   const xStep = spanY > 160 ? 40 : spanY > 80 ? 20 : spanY > 30 ? 10 : 5;
   for (let y = Math.ceil(y0 / xStep) * xStep; y <= y1; y += xStep) {
     svg.append(el('line', { x1: X(y), x2: X(y), y1: H - m.b, y2: H - m.b + 4, class: 'c-axis' }));
-    svg.append(el('text', { x: X(y), y: H - m.b + 16, class: 'c-tick', 'text-anchor': 'middle' }, y));
+    svg.append(el('text', { x: X(y), y: H - m.b + 19, class: 'c-tick', 'text-anchor': 'middle' }, y));
   }
   svg.append(el('text', { x: W - m.r, y: Y(0) - 4, class: 'c-note', 'text-anchor': 'end' }, model.baselineLabel));
 
@@ -95,7 +95,9 @@ export function renderChart(svg, model) {
   // unusual years
   for (const u of a.unusual) {
     svg.append(el('circle', { cx: X(u.year), cy: Y(u.value), r: 4, class: 'c-unusual' }));
-    svg.append(el('text', { x: X(u.year), y: Y(u.value) + (u.z > 0 ? -7 : 14), class: 'c-note', 'text-anchor': 'middle' }, u.year));
+    // near the left edge the label starts at the point, clear of the axis numbers
+    const nearAxis = X(u.year) < m.l + 22;
+    svg.append(el('text', { x: X(u.year) + (nearAxis ? 7 : 0), y: Y(u.value) + (nearAxis ? 4 : u.z > 0 ? -8 : 17), class: 'c-note', 'text-anchor': nearAxis ? 'start' : 'middle' }, u.year));
   }
 
   // timeline cursor
@@ -105,8 +107,8 @@ export function renderChart(svg, model) {
     svg.append(el('line', { x1: X(cursorYear), x2: X(cursorYear), y1: m.t, y2: H - m.b, class: 'c-cursor' }));
     if (v != null) {
       svg.append(el('circle', { cx: X(cursorYear), cy: Y(v), r: 3.2, fill: '#fff' }));
-      const right = X(cursorYear) < W - 90;
-      svg.append(el('text', { x: X(cursorYear) + (right ? 6 : -6), y: m.t + 9, class: 'c-cursor-label', 'text-anchor': right ? 'start' : 'end' },
+      const right = X(cursorYear) < W - 120;
+      svg.append(el('text', { x: X(cursorYear) + (right ? 6 : -6), y: m.t - 5, class: 'c-cursor-label', 'text-anchor': right ? 'start' : 'end' },
         `${cursorYear}: ${num(v, model.decimals, { sign: true })} ${unit}`));
     }
   }
@@ -128,7 +130,7 @@ export function renderChart(svg, model) {
     if (v == null) { hover.setAttribute('visibility', 'hidden'); return; }
     hover.setAttribute('visibility', 'visible');
     hl.setAttribute('x1', X(year)); hl.setAttribute('x2', X(year));
-    const right = X(year) < W - 100;
+    const right = X(year) < W - 150;
     ht.setAttribute('x', X(year) + (right ? 6 : -6));
     ht.setAttribute('text-anchor', right ? 'start' : 'end');
     ht.textContent = `${year}: ${num(v, model.decimals, { sign: true })} ${unit}${i < 0 ? ` (${t('projected')})` : ''}`;

@@ -6,7 +6,8 @@ import { t, num, pText, getLang } from './i18n.js';
 const inParens = (s) => (getLang() === 'es' ? s.toLowerCase() : s);
 import { formatLatLon } from './geo.js';
 
-const withUnit = (v, ctx, sign = true) => `${num(v, ctx.decimals, { sign })} ${ctx.unit}`;
+// a non-breaking space keeps the number and its unit on one line
+const withUnit = (v, ctx, sign = true) => `${num(v, ctx.decimals, { sign })}\u00a0${ctx.unit}`;
 
 // ctx: { name, unit, decimals, wherePhrase, whereLabel, seasonLabel }
 export function describeSeries(a, ctx) {
@@ -44,7 +45,8 @@ export function describeSeries(a, ctx) {
     })]);
   }
   details.push([t('dUnusual'), a.unusual.length ? a.unusual.map((u) => `${u.year} (${num(u.z, 1, { sign: true })}σ)`).join(', ') : t('none')]);
-  return { verdict, verdict2, facts, details };
+  // the figure in the headline, as written there, so the interface can count it up
+  return { verdict, verdict2, facts, details, verdictNumber: a.significant ? x : null };
 }
 
 export function describeRegion(r, ctx) {

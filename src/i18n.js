@@ -88,6 +88,13 @@ const es = {
   sigYes: 'significativa', sigNo: 'no significativa',
   legendExag: 'Cambio exagerado ×{n} para hacerlo visible.',
   webglFail: 'Este navegador no pudo iniciar WebGL, necesario para el globo 3D.',
+  viewOptions: 'Opciones de la vista', retry: 'Reintentar', explain: 'Explicar: {x}',
+  errCoords: 'Escribe una latitud entre −90 y 90 y una longitud entre −180 y 180.',
+  copyFail: 'El navegador bloqueó la copia. Usa «Descargar informe».',
+  tipAlpha: 'El riesgo que aceptas de dar por real una tendencia que solo es ruido. Con α = 0,05, una tendencia cuenta como significativa cuando un resultado así de fuerte aparecería por azar menos del 5 % de las veces.',
+  tipEcs: 'Cuánto se calienta finalmente el planeta si se duplica el CO₂ del aire. La mejor estimación del IPCC es 3 °C, con un rango probable de 2,5 a 4 °C.',
+  tipForcing: 'La energía extra que el planeta retiene por los gases de efecto invernadero, en vatios por metro cuadrado. Cada nivel corresponde a un escenario estándar de emisiones; cuanto más alto, más calentamiento.',
+  tipSig: 'La prueba de Mann-Kendall pregunta si los valores suben o bajan de forma más constante de lo que produciría el azar. El valor p es la probabilidad de ver un patrón así de fuerte sin que exista una tendencia real.',
 };
 
 const en = {
@@ -178,6 +185,13 @@ const en = {
   sigYes: 'significant', sigNo: 'not significant',
   legendExag: 'Change exaggerated ×{n} to make it visible.',
   webglFail: 'This browser could not start WebGL, which the 3D globe needs.',
+  viewOptions: 'View options', retry: 'Try again', explain: 'Explain: {x}',
+  errCoords: 'Enter a latitude from −90 to 90 and a longitude from −180 to 180.',
+  copyFail: 'The browser blocked copying. Use Download report instead.',
+  tipAlpha: 'The risk you accept of calling a trend real when it is only noise. At α = 0.05, a trend counts as significant when a result this strong would appear by chance less than 5% of the time.',
+  tipEcs: 'How much the planet eventually warms if the CO₂ in the air doubles. The IPCC best estimate is 3 °C, with a likely range of 2.5 to 4 °C.',
+  tipForcing: 'The extra energy the planet retains because of greenhouse gases, in watts per square meter. Each level matches a standard emissions scenario; higher means more warming.',
+  tipSig: 'The Mann-Kendall test asks whether the values rise or fall more consistently than chance would produce. The p-value is the probability of a pattern this strong with no real trend.',
 };
 
 const dict = { es, en };
@@ -192,9 +206,10 @@ export function t(key, vars) {
   return s;
 }
 
-// Fill every element that declares data-i18n (text) or data-i18n-title
+// Fill every element that declares data-i18n (text), data-i18n-label (aria-label) or data-i18n-title
 export function applyStatic(root = document) {
   root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n, el.dataset.i18nVars ? JSON.parse(el.dataset.i18nVars) : undefined); });
+  root.querySelectorAll('[data-i18n-label]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   root.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
 }
 
