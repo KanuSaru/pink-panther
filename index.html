@@ -38,10 +38,19 @@
     </div>
   </header>
 
+  <div class="stage-tools">
+    <div class="seg" id="view" role="group" data-i18n-label="view">
+      <button type="button" data-view="natural" data-i18n="v_natural"></button>
+      <button type="button" data-view="anomaly" data-i18n="v_anomaly"></button>
+      <button type="button" data-view="temperature" data-i18n="v_temperature"></button>
+      <button type="button" data-view="satellite" data-i18n="v_satellite"></button>
+    </div>
+  </div>
+
   <main class="panels">
   <aside class="panel controls" id="controls">
     <section>
-      <h2 data-i18n="what"></h2>
+      <h2 id="variable-label" data-i18n="what"></h2>
       <select id="variable" aria-labelledby="variable-label"></select>
       <p class="define" id="varAbout"></p>
       <p class="note" data-i18n="whatNote"></p>
@@ -53,10 +62,11 @@
       <p class="sub" data-i18n="examples"></p>
       <div class="chips" id="places"></div>
       <div class="row2">
-        <label><span data-i18n="lat"></span><input id="lat" type="number" step="0.01" min="-90" max="90" inputmode="decimal"></label>
-        <label><span data-i18n="lon"></span><input id="lon" type="number" step="0.01" min="-180" max="180" inputmode="decimal"></label>
+        <label><span data-i18n="lat"></span><input id="lat" name="latitude" type="number" step="0.01" min="-90" max="90" inputmode="decimal" autocomplete="off" placeholder="10.96" aria-describedby="coordError"></label>
+        <label><span data-i18n="lon"></span><input id="lon" name="longitude" type="number" step="0.01" min="-180" max="180" inputmode="decimal" autocomplete="off" placeholder="-74.80" aria-describedby="coordError"></label>
       </div>
-      <button type="button" id="goPoint" data-i18n="go"></button>
+      <p class="field-error" id="coordError" role="alert" hidden></p>
+      <button type="button" class="primary" id="goPoint" data-i18n="go"></button>
       <button type="button" id="goRegion" data-i18n="region" disabled></button>
       <p class="note" id="regionNote"></p>
       <button type="button" class="quiet" id="goPlanet" data-i18n="planet"></button>
@@ -65,26 +75,20 @@
     <section>
       <h2 data-i18n="when"></h2>
       <div class="row2">
-        <label><span data-i18n="from"></span><input id="from" type="number" step="1" inputmode="numeric"></label>
-        <label><span data-i18n="to"></span><input id="to" type="number" step="1" inputmode="numeric"></label>
+        <label><span data-i18n="from"></span><input id="from" name="from-year" type="number" step="1" inputmode="numeric" autocomplete="off"></label>
+        <label><span data-i18n="to"></span><input id="to" name="to-year" type="number" step="1" inputmode="numeric" autocomplete="off"></label>
       </div>
       <label><span data-i18n="season"></span><select id="season"></select></label>
     </section>
 
-    <section>
-      <h2 data-i18n="view"></h2>
-      <div class="seg" id="view" role="group">
-        <button type="button" data-view="natural" data-i18n="v_natural"></button>
-        <button type="button" data-view="anomaly" data-i18n="v_anomaly"></button>
-        <button type="button" data-view="temperature" data-i18n="v_temperature"></button>
-        <button type="button" data-view="satellite" data-i18n="v_satellite"></button>
-      </div>
+    <section id="viewSection">
+      <h2 data-i18n="viewOptions"></h2>
       <p class="note" id="viewHint"></p>
       <label id="scaleRow"><span data-i18n="scale"></span>
         <select id="scale"></select>
       </label>
       <label id="monthRow"><span data-i18n="month"></span><select id="month"></select></label>
-      <label id="exagRow"><span><span data-i18n="exag"></span> <output id="exagOut"></output></span>
+      <label id="exagRow" for="exag"><span><span data-i18n="exag"></span> <output id="exagOut" for="exag"></output></span>
         <input id="exag" type="range" min="1" max="20" step="1" value="10"></label>
       <label id="opacityRow"><span data-i18n="opacity"></span>
         <input id="opacity" type="range" min="0.2" max="1" step="0.02" value="0.92"></label>
@@ -95,9 +99,14 @@
     <section>
       <h2 data-i18n="projection"></h2>
       <div class="group" id="modelControls">
-        <label><span data-i18n="scenario"></span><select id="scenario"></select></label>
-        <label><span><span data-i18n="ecs"></span> <output id="ecsOut"></output></span>
-          <input id="ecs" type="range" min="2" max="5" step="0.1" value="3" list="ecsMarks"></label>
+        <div class="field">
+          <div class="field-head"><label for="scenario" data-i18n="scenario"></label><button class="info" data-tip="tipForcing" data-tip-for="scenario"></button></div>
+          <select id="scenario"></select>
+        </div>
+        <div class="field">
+          <div class="field-head"><label for="ecs"><span data-i18n="ecs"></span> <output id="ecsOut" for="ecs"></output></label><button class="info" data-tip="tipEcs" data-tip-for="ecs"></button></div>
+          <input id="ecs" type="range" min="2" max="5" step="0.1" value="3" list="ecsMarks">
+        </div>
         <datalist id="ecsMarks"><option value="2.5"></option><option value="3"></option><option value="4"></option></datalist>
         <div class="scale3"><span>2</span><span data-i18n="ecsLikely"></span><span>5 °C</span></div>
       </div>
@@ -108,17 +117,28 @@
         <div class="scale3"><span data-i18n="r0"></span><span data-i18n="r1"></span><span data-i18n="r2"></span></div>
       </div>
       <p class="note" id="projNote"></p>
-      <label><span data-i18n="alpha"></span>
+      <div class="field">
+        <div class="field-head"><label for="alpha" data-i18n="alpha"></label><button class="info" data-tip="tipAlpha" data-tip-for="alpha"></button></div>
         <select id="alpha"><option value="0.1">α = 0.10</option><option value="0.05" selected>α = 0.05</option><option value="0.01">α = 0.01</option></select>
-      </label>
+      </div>
     </section>
   </aside>
 
-  <aside class="panel findings" id="findings" aria-live="polite">
+  <aside class="panel findings" id="findings">
     <p class="scope" id="scope"></p>
-    <p class="status" id="status" hidden></p>
+    <div class="status" id="status" hidden>
+      <p id="statusText" role="status"></p>
+      <div class="progress" id="progress" hidden><i></i></div>
+      <button type="button" id="retry" data-i18n="retry" hidden></button>
+    </div>
+    <div class="skeleton" id="skeleton" aria-hidden="true" hidden>
+      <i class="sk-title"></i><i class="sk-title short"></i><i class="sk-line"></i>
+      <i class="sk-row"></i><i class="sk-row"></i><i class="sk-row"></i><i class="sk-row"></i>
+      <i class="sk-chart"></i>
+    </div>
+    <p class="visually-hidden" id="announce" aria-live="polite"></p>
     <div id="result" hidden>
-      <p class="verdict" id="verdict"></p>
+      <h2 class="verdict" id="verdict"></h2>
       <p class="verdict2" id="verdict2"></p>
       <dl class="facts" id="facts"></dl>
       <figure id="chartWrap">
@@ -163,6 +183,8 @@
     <p class="note" data-i18n="siNote"></p>
     <form method="dialog"><button data-i18n="close"></button></form>
   </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
 
   <noscript>This application needs JavaScript and WebGL.</noscript>
   <script type="module" src="./src/main.js"></script>
