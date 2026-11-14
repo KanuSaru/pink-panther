@@ -236,6 +236,25 @@ summary { cursor: pointer; padding: 9px 0; font-weight: 550; font-size: 0.9rem; 
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 16px 0 12px; }
 
+/* ---------- guided tour ---------- */
+.tour {
+  position: fixed; z-index: 3;
+  left: calc(var(--lw) + 16px); top: calc(var(--bh) + 66px);
+  width: min(380px, calc(100vw - var(--lw) - var(--rw) - 32px));
+  background: var(--panel); border: 1px solid var(--ink);
+  padding: 14px 16px 12px; display: grid; gap: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+.tour h2 { font-size: 1.08rem; line-height: 1.25; }
+.tour h2:focus-visible { outline: none; }
+.tour-count { color: var(--muted); font-size: 0.82rem; }
+.tour p { font-size: 0.93rem; line-height: 1.45; }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-actions .quiet { margin-right: auto; }
+.tour-actions button:not(.quiet) { padding-inline: 16px; }
+.tour-focus { outline: 2px solid var(--ink); outline-offset: 6px; }
+dialog p + p { margin-top: 10px; }
+
 /* ---------- legend ---------- */
 .legend {
   position: fixed;
@@ -338,6 +357,9 @@ dialog form { margin-top: 18px; }
   .stage-tools { left: 8px; right: 8px; top: calc(var(--bh) + 8px); }
   .stage-tools .seg { width: 100%; }
   .toast { right: 12px; bottom: calc(var(--th) + 12px); max-width: calc(100vw - 24px); }
+  .tour { left: 8px; right: 8px; top: auto; bottom: calc(var(--th) + 8px); width: auto; padding: 12px 14px 10px; }
+  .touring .panels { padding-bottom: 230px; }
+  #tourBtn { padding-inline: 10px; }
   .track-marks span:not(.split):not(:first-child):not(:last-child), .track-marks em { display: none; }
   .year-readout { min-width: 64px; }
   .year-readout output { font-size: 1.5rem; }

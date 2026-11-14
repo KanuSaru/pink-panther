@@ -32,6 +32,8 @@ export function describeSeries(a, ctx) {
     [t('qHow'), how.join('; ')],
     [t('qSig'), `${t(a.significant ? 'yes' : 'no')}. ${t('mkLine', { p: pText(a.mk.p), op: a.significant ? '<' : '≥', a: num(a.alpha, 2) })}`],
   ];
+  // what the result supports saying, for someone who has to act on it, teach it or build on it
+  facts.push([t('qUse'), t(a.significant ? 'useSig' : 'useNo', { n: a.n }) + (a.shift?.abrupt ? ` ${t('useStep', { y: a.shift.year })}` : '')]);
   const details = [
     [t('dN'), `${a.n} (${a.period[0]}–${a.period[1]})`],
     [t('dBase'), `${withUnit(a.base, ctx, false)} (${a.baselineUsed[0]}–${a.baselineUsed[1]})`],
