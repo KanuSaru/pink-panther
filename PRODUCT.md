@@ -8,7 +8,13 @@ web
 
 ## Users
 
-Primary: judges of the NASA Space Apps Challenge 2026. They see the tool during a short demo, usually on a laptop or a projector, and have a few minutes to decide whether it answers the challenge. They are technically literate but are not necessarily statisticians or climate scientists.
+Primary (set by the team on 2026-11-14): technical staff, teachers and researchers. They need to know whether a change in a place is real before acting on it, teaching it or studying it further. They are technically literate but are not necessarily statisticians or climate scientists.
+
+- Technical staff (agencies, municipalities, NGOs): want a defensible statement for a brief, with method and limits attached.
+- Teachers: want something that works in front of a class and a link students can reopen.
+- Researchers: want a fast first look, the exact data request and the series to repeat the analysis elsewhere.
+
+The judges of the NASA Space Apps Challenge 2026 see the tool on behalf of these users during a short demo, usually on a laptop or a projector. The guided tour (header button) is the path through the tool for that demo and for a first visit.
 
 Secondary (not confirmed as a priority): anyone who opens the public link afterwards, including on a phone. The phone layout has to work; it does not lead design decisions.
 

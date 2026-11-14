@@ -12,6 +12,7 @@ import { renderChart } from './chart.js';
 import { describeSeries, describeRegion, buildReport } from './report.js';
 import { t, num, pText, setLang, getLang, applyStatic } from './i18n.js';
 import { hydrateTips, infoButton, toast, countUp, arrive } from './ui.js';
+import { createTour } from './tour.js';
 
 const $ = (id) => document.getElementById(id);
 const LAST = lastCompleteYear();
@@ -51,7 +52,7 @@ const SCENARIOS = [{ name: 'SSP1-2.6', f: 2.6 }, { name: 'SSP2-4.5', f: 4.5 }, {
 
 const variable = () => VARIABLES.find((v) => v.id === state.variable);
 const unitOf = (v) => (getLang() === 'en' && v.unitEn) || v.unit;
-let globe;
+let globe, tour;
 
 // ------------------------------------------------------------------ setup
 
@@ -82,6 +83,8 @@ function init() {
   const shared = readLink();
   buildControls();
   bind();
+  tour = createTour(tourSteps());
+  $('tourBtn').addEventListener('click', () => tour.start($('tourBtn')));
   renderAll();
   loadPlanet();
   if (shared) selectPoint(shared.lat, shared.lon);
@@ -295,6 +298,44 @@ function bind() {
     try { await navigator.clipboard.writeText(currentReport()); toast(t('copied')); }
     catch { toast(t('copyFail')); }
   });
+}
+
+// ------------------------------------------------------------------ guided tour
+
+const TOUR_EXAMPLE = 2; // Sahel rains
+const TOUR_OTHER = { lat: -2, lon: 22, name: { es: 'la cuenca del Congo', en: 'the Congo basin' } };
+
+// Each step drives the real interface, so what the tour shows is what the tool computes.
+function tourSteps() {
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const toPlanet = () => { stopPlay(); if (state.scope !== 'planet') $('goPlanet').click(); };
+  const settled = (alive) => new Promise((resolve) => {
+    const tick = () => (!alive() ? resolve(false) : !state.busy && (state.pointAnalysis || state.pointError) ? resolve(!!state.pointAnalysis) : setTimeout(tick, 250));
+    tick();
+  });
+  // the worked example over the whole record, whatever was on screen before
+  const toExample = async (alive) => {
+    stopPlay();
+    const full = state.period[0] === POWER_FIRST_YEAR && state.period[1] === LAST;
+    if (state.scope !== 'planet' && state.example === TOUR_EXAMPLE && full && !state.pin) return settled(alive);
+    state.pin = null;
+    state.period = [POWER_FIRST_YEAR, LAST];
+    $('from').value = POWER_FIRST_YEAR; $('to').value = LAST;
+    $('places').children[TOUR_EXAMPLE].click();
+    return settled(alive);
+  };
+  return [
+    { key: 'tour3', focus: 'facts', run: ({ alive }) => toExample(alive) },
+    { key: 'tour4', focus: 'screenWrap', run: ({ alive }) => toExample(alive) },
+    { key: 'tour5', focus: 'chartWrap', run: async ({ alive }) => {
+      if (!(await toExample(alive)) || !alive()) return;
+      $('pin').click();
+      await selectPoint(TOUR_OTHER.lat, TOUR_OTHER.lon, TOUR_OTHER.name[getLang()]);
+    } },
+    { key: 'tour1', focus: 'bandsWrap', run: () => { toPlanet(); if (state.gistemp) setView('anomaly'); setYear(LAST); } },
+    { key: 'tour2', focus: 'chartWrap', run: () => { toPlanet(); if (calm()) { setYear(HORIZON_MAX); return; } setYear(LAST); startPlay(); } },
+    { key: 'tour6', focus: 'actions', run: () => stopPlay() },
+  ];
 }
 
 // ------------------------------------------------------------------ data
@@ -629,6 +670,7 @@ function renderAll() {
   $('places').querySelectorAll('.chip').forEach((b, i) => b.setAttribute('aria-pressed', i === state.example));
   if (!$('coordError').hidden) $('coordError').textContent = t('errCoords');
   hydrateTips();
+  tour?.render();
   renderViewControls();
   renderYear();
   renderFindings();

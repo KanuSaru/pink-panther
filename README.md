@@ -4,6 +4,10 @@ Prototype for the NASA Space Apps Challenge 2026. A 3D globe where you pick an E
 
 The interface is in English by default and also in Spanish (EN / ES button, or `?lang=es` in the URL).
 
+## Who it is for
+
+Technical staff, teachers and researchers who need to know whether a change in a place is real before acting on it, teaching it or studying it further. The **Guided tour** button in the header walks through the tool in six steps, each one run on live NASA data: one place and its four answers, which variables are changing there, two places moving in opposite directions, the planet, its projection, and how to take the result away (report, CSV, link). Every result also carries a "What you can say" line: what the test supports stating, and what it does not.
+
 ## What it does
 
 | Challenge objective | How the tool answers |
@@ -97,6 +101,7 @@ src/data.js                 requests to NASA POWER, GISTEMP and GIBS
 src/analysis.js, stats.js   series, trends and significance tests
 src/chart.js, report.js     SVG chart and report
 src/ui.js                   term explanations, toast and count-up
+src/tour.js                 guided tour
 src/config.js               variables, examples, palettes and credits
 src/i18n.js                 English and Spanish text
 api/                        Vercel proxies (used only if the browser cannot reach NASA)

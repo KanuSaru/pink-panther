@@ -34,6 +34,7 @@
         <button type="button" data-lang="en">EN</button>
         <button type="button" data-lang="es">ES</button>
       </div>
+      <button type="button" id="tourBtn" data-i18n="tour"></button>
       <button type="button" class="quiet" id="aboutBtn" data-i18n="about"></button>
     </div>
   </header>
@@ -152,6 +153,11 @@
         <svg id="chart" class="chart"></svg>
         <ul class="key" id="chartKey"></ul>
       </figure>
+      <div id="screenWrap">
+        <h3 data-i18n="screenTitle"></h3>
+        <p class="note" id="screenNote"></p>
+        <table class="bands screen" id="screen"></table>
+      </div>
       <div id="bandsWrap">
         <h3 data-i18n="bands"></h3>
         <table class="bands" id="bands"></table>
@@ -160,16 +166,11 @@
         <h3 data-i18n="seasonsTitle"></h3>
         <table class="bands" id="seasons"></table>
       </div>
-      <div id="screenWrap">
-        <h3 data-i18n="screenTitle"></h3>
-        <p class="note" id="screenNote"></p>
-        <table class="bands screen" id="screen"></table>
-      </div>
       <details id="detailsWrap">
         <summary data-i18n="details"></summary>
         <dl class="details" id="details"></dl>
       </details>
-      <div class="actions">
+      <div class="actions" id="actions">
         <button type="button" id="download" data-i18n="report"></button>
         <button type="button" id="csv" data-i18n="csv"></button>
         <button type="button" class="quiet" id="link" data-i18n="link"></button>
@@ -183,6 +184,17 @@
 
   <div class="legend" id="legend" hidden></div>
 
+  <section class="tour" id="tour" role="dialog" aria-labelledby="tourTitle" hidden>
+    <p class="tour-count" id="tourCount"></p>
+    <h2 id="tourTitle" tabindex="-1"></h2>
+    <p id="tourBody"></p>
+    <div class="tour-actions">
+      <button type="button" class="quiet" id="tourEnd" data-i18n="tourEnd"></button>
+      <button type="button" id="tourBack" data-i18n="tourBack"></button>
+      <button type="button" class="primary" id="tourNext"></button>
+    </div>
+  </section>
+
   <footer class="timeline">
     <button type="button" id="play" class="play" data-i18n-title="play"><span aria-hidden="true"></span></button>
     <div class="track" id="track">
@@ -194,6 +206,7 @@
 
   <dialog id="about">
     <h2 data-i18n="about"></h2>
+    <p data-i18n="aboutFor"></p>
     <p data-i18n="aboutBody"></p>
     <h3 data-i18n="credits"></h3>
     <ul class="credits" id="credits"></ul>
