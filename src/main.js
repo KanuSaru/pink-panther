@@ -5,6 +5,8 @@ import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POW
 import { fetchPoint, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
 import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES } from './analysis.js';
 import { mean } from './stats.js';
+import { EBM, calibrate, project } from './ebm.js';
+import { SIM_W, SIM_H } from './shaders.js';
 import { latLonToVec3, formatLatLon, boxAround, clamp } from './geo.js';
 import { renderChart } from './chart.js';
 import { describeSeries, describeRegion, buildReport } from './report.js';
@@ -22,7 +24,11 @@ const state = {
   period: [POWER_FIRST_YEAR, LAST],
   season: 'ANN',
   alpha: 0.05,
-  factor: 1,                  // what-if multiplier on the rate of change
+  factor: 1,                  // what-if multiplier on the rate of change (points and regions)
+  scenario: 4.5,              // W/m2 reached in 2100 (planet model)
+  ecs: EBM.ECS_BEST,          // equilibrium climate sensitivity, K (planet model)
+  ocean: null,                // ocean fraction grids for the model
+  model: null,                // calibrated energy balance model and its projection
   year: LAST,
   month: 7,
   scale: 2.75,
@@ -34,6 +40,9 @@ const state = {
   sat: null,
   playing: false,
 };
+
+// Forcing levels that name the standard scenarios (W/m2 in 2100)
+const SCENARIOS = [{ name: 'SSP1-2.6', f: 2.6 }, { name: 'SSP2-4.5', f: 4.5 }, { name: 'SSP3-7.0', f: 7.0 }, { name: 'SSP5-8.5', f: 8.5 }];
 
 const variable = () => VARIABLES.find((v) => v.id === state.variable);
 const unitOf = (v) => (getLang() === 'en' && v.unitEn) || v.unit;
@@ -69,6 +78,7 @@ function init() {
   bind();
   renderAll();
   loadPlanet();
+  loadOcean().then((o) => { state.ocean = o; if (state.gistemp) recompute(); }).catch((e) => console.warn('Ocean mask unavailable; planet projections fall back to the trend', e));
 }
 
 function buildControls() {
@@ -103,6 +113,7 @@ function buildControls() {
     li.append(a, ` ${c.note[getLang()]}`);
     return li;
   }));
+  $('scenario').replaceChildren(...SCENARIOS.map((s) => new Option(t('scenarioOpt', { n: s.name, f: num(s.f, 1) }), s.f, false, s.f === state.scenario)));
   $('scale').replaceChildren(...[2.75, 5.5].map((r) => new Option(`± ${num(r, 2)} °C`, r, false, r === state.scale)));
   $('from').value = state.period[0];
   $('to').value = state.period[1];
@@ -182,7 +193,14 @@ function bind() {
   $('opacity').addEventListener('input', (e) => globe.set('uOverlay', parseFloat(e.target.value)));
   $('stepped').addEventListener('change', (e) => { globe.set('uStepped', e.target.checked ? 1 : 0); renderLegend(); });
 
-  $('rate').addEventListener('input', (e) => { state.factor = parseFloat(e.target.value); applyBands(); renderChartOnly(); });
+  $('rate').addEventListener('input', (e) => { state.factor = parseFloat(e.target.value); renderChartOnly(); });
+  const onModel = () => {
+    clearTimeout(onModel.timer);
+    onModel.timer = setTimeout(() => { recomputeModel(); applyBands(); renderAll(); }, 120);
+  };
+  $('scenario').addEventListener('change', (e) => { state.scenario = parseFloat(e.target.value); onModel(); });
+  $('ecs').addEventListener('input', (e) => { state.ecs = parseFloat(e.target.value); $('ecsOut').textContent = `${num(state.ecs, 1)} °C`; onModel(); });
+  $('grid').addEventListener('change', (e) => globe.set('uGrid', e.target.checked ? 1 : 0));
 
   $('year').addEventListener('input', (e) => { stopPlay(); setYear(parseInt(e.target.value, 10), true); });
   $('play').addEventListener('click', () => (state.playing ? stopPlay() : startPlay()));
@@ -203,6 +221,78 @@ function bind() {
 }
 
 // ------------------------------------------------------------------ data
+
+// Ocean fraction per model cell, averaged from the ocean mask texture (white = water).
+function loadOcean() {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const SW = 512, SH = 256;
+      const c = document.createElement('canvas');
+      c.width = SW; c.height = SH;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, SW, SH);
+      const px = ctx.getImageData(0, 0, SW, SH).data;
+      const grid = (W, H) => {
+        const bx = SW / W, by = SH / H, out = new Float64Array(W * H);
+        for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+          let s = 0;
+          for (let y = 0; y < by; y++) for (let x = 0; x < bx; x++) s += px[((j * by + y) * SW + i * bx + x) * 4];
+          out[(H - 1 - j) * W + i] = s / (bx * by * 255); // image rows run north to south, model rows south to north
+        }
+        return out;
+      };
+      const gpu = grid(SIM_W, SIM_H);
+      const gpuBytes = new Uint8Array(SIM_W * SIM_H * 4);
+      // the GPU reads the mask as bytes, so the CPU copy is quantised the same way
+      gpu.forEach((v, k) => { gpuBytes[k * 4] = Math.round(v * 255); gpuBytes[k * 4 + 3] = 255; gpu[k] = gpuBytes[k * 4] / 255; });
+      resolve({ cpu: grid(32, 16), gpu, gpuBytes });
+    };
+    img.onerror = () => reject(new Error('ocean mask failed to load'));
+    img.src = './assets/earth_specular.jpg';
+  });
+}
+
+// Calibrate the energy balance model on the observed record and project it.
+function recomputeModel() {
+  const g = state.gistemp;
+  if (!g || !state.ocean || state.bands.length !== 8 || !state.bands.every(Boolean)) { state.model = null; return; }
+  // nothing the model depends on has changed: keep the current run
+  const key = [state.period, state.scenario, state.ecs, g.years.length].join('|');
+  if (state.model && state.model.key === key) return;
+  state.model = null;
+  try {
+    const last = g.years.at(-1);
+    const obs = {
+      years: g.years, bands: g.bands,
+      present: state.bands.map((b) => b.fit.predict(last) + b.base),
+      rate: state.bands.map((b) => b.fit.slope),
+    };
+    const run = (ecs) => {
+      const cal = calibrate({ obs, ocean: state.ocean.cpu, W: 32, H: 16, ecs });
+      return { cal, proj: cal.ok ? project(cal, state.ocean.cpu, state.scenario) : null };
+    };
+    const mid = run(state.ecs);
+    if (!mid.proj || !mid.proj.global.every(Number.isFinite)) return;
+    const lo = run(EBM.ECS_LIKELY[0]), hi = run(EBM.ECS_LIKELY[1]);
+    state.model = { key, cal: mid.cal, proj: mid.proj, lo: lo.proj, hi: hi.proj, gpu: false };
+    if (globe.sim.supported) {
+      const cal = calibrate({ obs, ocean: state.ocean.gpu, W: SIM_W, H: SIM_H, ecs: state.ecs });
+      if (cal.ok) {
+        globe.sim.configure({
+          t0: cal.t0, F0: cal.F0, f2100: state.scenario, dt: cal.dt,
+          lam: Float32Array.from(cal.lam), T0: Float32Array.from(cal.T0), Td0: Float32Array.from(cal.Td0), pi: Float32Array.from(cal.piRows),
+          oceanBytes: state.ocean.gpuBytes,
+        });
+        state.model.gpu = true;
+      }
+    }
+  } catch (e) {
+    console.warn('Energy balance model failed; planet projections fall back to the trend', e);
+    state.model = null;
+  }
+}
 
 async function loadPlanet() {
   state.busy = 'loadingGistemp';
@@ -315,6 +405,7 @@ function recompute() {
       globe.set('uRegionOn', 0);
     }
   }
+  recomputeModel();
   applyBands();
   renderAll();
 }
@@ -328,8 +419,13 @@ function applyBands() {
   const vals = new Float32Array(8);
   for (let k = 0; k < 8; k++) {
     if (state.year <= last) vals[k] = g.bands[k][clamp(state.year - g.years[0], 0, g.years.length - 1)];
-    else vals[k] = state.bands[k] ? state.bands[k].project(state.year, state.factor).value + state.bands[k].base : g.bands[k].at(-1);
+    else if (state.model) vals[k] = state.model.proj.bands[clamp(state.year - state.model.cal.t0, 0, state.model.proj.bands.length - 1)][k];
+    else vals[k] = state.bands[k] ? state.bands[k].project(state.year, 1).value + state.bands[k].base : g.bands[k].at(-1);
   }
+  // after the last observed year the globe shows the model's 2D field when the GPU solver runs
+  const modelled = !!state.model && state.model.gpu && state.year > last;
+  if (modelled) globe.sim.setTarget(state.year);
+  globe.set('uSimOn', modelled ? 1 : 0);
   globe.set('uBands', vals);
   globe.set('uBandsRef', new Float32Array(state.bandsRef));
   globe.set('uRange', state.scale);
@@ -406,7 +502,13 @@ function renderAll() {
   $('lang').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === getLang()));
   $('varAbout').textContent = variable().about[getLang()];
   $('regionNote').textContent = t('regionNote', { s: REGION_SIZE });
-  $('projNote').textContent = t('projNote', { y: LAST });
+  const planet = state.scope === 'planet';
+  $('modelControls').hidden = !planet;
+  $('trendControls').hidden = planet;
+  $('ecsOut').textContent = `${num(state.ecs, 1)} °C`;
+  $('projNote').textContent = !planet ? t('projNote', { y: LAST })
+    : state.model ? `${t('modelNote', { y: state.model.cal.t0, f: num(state.model.cal.F0, 2), n: num(state.model.cal.N0, 2) })}${state.model.gpu ? '' : ` ${t('modelCpu')}`}`
+      : t('projNote', { y: LAST });
   $('goRegion').disabled = !state.point;
   $('goPlanet').hidden = state.scope === 'planet';
   $('exagOut').textContent = '×' + $('exag').value;
@@ -427,6 +529,7 @@ function renderViewControls() {
   $('exagRow').hidden = state.view !== 'temperature';
   $('opacityRow').hidden = state.view === 'natural';
   $('steppedRow').hidden = state.view !== 'anomaly' && !state.region;
+  $('gridRow').hidden = state.view === 'natural';
 }
 
 function renderYear() {
@@ -494,14 +597,15 @@ function renderFindings() {
   $('verdict').textContent = d.verdict;
   $('verdict2').textContent = d.verdict2 + (regionReady && state.regionRaw.sampled ? ` ${t('sampledNote', { n: state.regionRaw.features.length })}` : '');
   $('verdict2').hidden = !$('verdict2').textContent;
-  fillDl($('facts'), d.facts);
+  const next = modelOutlook();
+  fillDl($('facts'), next && !regionReady ? [...d.facts, [t('qNext'), next]] : d.facts);
 
   $('chartWrap').hidden = !analysis;
   $('detailsWrap').hidden = !analysis;
   if (analysis) {
     $('chartTitle').textContent = `${ctx.name}, ${ctx.whereLabel}. ${t('chartAnom', { a: analysis.baselineUsed[0], b: analysis.baselineUsed[1] })} (${ctx.unit})`;
     renderChartOnly();
-    const key = [['obs', t('chartObs')], ['trend', t('chartTrend')], ['proj', t('chartProj')]];
+    const key = [['obs', t('chartObs')], ['trend', t('chartTrend')], ['proj', modelProjection(analysis) ? t('chartModel', { e: num(state.ecs, 1) }) : t('chartProj')]];
     if (analysis.unusual.length) key.push(['unusual', t('chartUnusual')]);
     $('chartKey').replaceChildren(...key.map(([cls, label]) => {
       const li = document.createElement('li');
@@ -528,13 +632,28 @@ function renderFindings() {
   }
 }
 
+// The model's global-mean curve in the chart's units, with the band for the likely sensitivity range
+function modelProjection(analysis) {
+  if (state.scope !== 'planet' || !state.model) return null;
+  const m = state.model, rel = (arr) => arr.map((v) => v - analysis.base);
+  const a = rel(m.lo.global), b = rel(m.hi.global);
+  return { years: m.proj.years, value: rel(m.proj.global), lo: a.map((v, i) => Math.min(v, b[i])), hi: a.map((v, i) => Math.max(v, b[i])) };
+}
+
+// One sentence on where the planet is heading under the chosen forcing
+function modelOutlook() {
+  if (state.scope !== 'planet' || !state.model) return null;
+  const m = state.model, r = [m.lo.warmingSincePI, m.hi.warmingSincePI].sort((x, y) => x - y);
+  return t('nextLine', { v: num(m.proj.warmingSincePI, 1, { sign: true }), a: num(r[0], 1, { sign: true }), b: num(r[1], 1, { sign: true }), f: num(state.scenario, 1) });
+}
+
 function renderChartOnly() {
   const analysis = state.scope === 'planet' ? state.planet : state.pointAnalysis;
   if (!analysis || $('result').hidden) return;
   const ctx = seriesContext();
   renderChart($('chart'), {
     analysis, unit: ctx.unit, decimals: ctx.decimals, color: trendColor(analysis, ctx.palette), factor: state.factor,
-    endYear: Math.max(2050, state.year), cursorYear: state.year,
+    endYear: Math.max(2050, state.year), cursorYear: state.year, modelProj: modelProjection(analysis),
     baselineLabel: t('chartBase', { a: analysis.baselineUsed[0], b: analysis.baselineUsed[1] }),
     ariaLabel: $('chartTitle').textContent,
   });
@@ -588,13 +707,14 @@ function renderLegend() {
     if (note) { const n = document.createElement('p'); n.className = 'legend-note'; n.textContent = note; d.append(n); }
     rows.push(d);
   };
-  if (state.view === 'anomaly') row(`${t('legendAnom')}, ${state.year}${state.year > LAST ? ` (${t('projected')})` : ''}`, legendBlocks('temp', state.scale, '°C', 2));
+  const how = state.year <= LAST ? '' : state.model ? ` (${t('legendModel', { f: num(state.scenario, 1), e: num(state.ecs, 1) })})` : ` (${t('projected')})`;
+  if (state.view === 'anomaly') row(`${t('legendAnom')}, ${state.year}${how}`, legendBlocks('temp', state.scale, '°C', 2));
   if (state.view === 'temperature') {
     const img = document.createElement('img'); img.src = './assets/temp_palette.png'; img.alt = ''; img.className = 'ramp';
     const ticks = document.createElement('div'); ticks.className = 'ticks';
     for (const k of [192, 224, 256, 288, 320]) { const s = document.createElement('span'); s.textContent = `${k} K`; ticks.append(s); }
     const box = document.createElement('div'); box.append(img, ticks);
-    row(`${t('legendTemp')}, ${state.year}${state.year > LAST ? ` (${t('projected')})` : ''}`, box, `${t('tempNote')} ${t('legendExag', { n: $('exag').value })}`);
+    row(`${t('legendTemp')}, ${state.year}${how}`, box, `${t('tempNote')} ${t('legendExag', { n: $('exag').value })}`);
   }
   if (state.view === 'satellite') {
     const s = state.sat;
@@ -628,7 +748,8 @@ function currentReport() {
   const analysis = state.scope === 'planet' ? state.planet : state.pointAnalysis;
   if (analysis) {
     const src = state.scope === 'planet' ? { name: SOURCES.gistemp.name, url: state.gistempMeta.url } : { name: SOURCES.power.name, url: state.pointRaw.url };
-    sections.push({ heading: `${state.scope === 'planet' ? t('scopePlanet') : t('scopePoint')}: ${ctx.name}, ${ctx.whereLabel}`, described: describeSeries(analysis, ctx), analysis, ctx, source: src });
+    const outlook = modelOutlook();
+    sections.push({ heading: `${state.scope === 'planet' ? t('scopePlanet') : t('scopePoint')}: ${ctx.name}, ${ctx.whereLabel}`, described: describeSeries(analysis, ctx), analysis, ctx, source: src, projectionText: outlook && `**${t('qNext')}:** ${outlook}` });
   }
   return buildReport({ sections, projectionYear: Math.max(state.year, 2050), factor: state.factor });
 }

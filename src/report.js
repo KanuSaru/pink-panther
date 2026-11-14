@@ -76,7 +76,9 @@ export function buildReport({ sections, projectionYear, factor }) {
     out.push(`| ${t('rQuestion')} | ${t('rAnswer')} |`, '|---|---|');
     for (const [q, a] of s.described.facts) out.push(`| ${q} | ${a} |`);
     out.push('');
-    if (s.analysis && projectionYear > s.analysis.period[1]) {
+    if (s.projectionText) {
+      out.push(s.projectionText, '');
+    } else if (s.analysis && projectionYear > s.analysis.period[1]) {
       const p = s.analysis.project(projectionYear, factor);
       const f = (v) => `${num(v, s.ctx.decimals, { sign: true })} ${s.ctx.unit}`;
       out.push(`**${t('rProj', { y: projectionYear })}:** ${t('rProjLine', { v: f(p.value), a: f(p.lo), b: f(p.hi), f: num(factor, 1) })}`, '');
@@ -88,6 +90,6 @@ export function buildReport({ sections, projectionYear, factor }) {
     }
     if (s.source) out.push(`${t('source')}: ${s.source.name}. ${s.source.url}`, '');
   }
-  out.push(`## ${t('rMethod')}`, '', t('rMethodBody'), '', `## ${t('rCaveat')}`, '', t('rCaveatBody'), '');
+  out.push(`## ${t('rMethod')}`, '', t('rMethodBody'), '', t('rModelBody'), '', `## ${t('rCaveat')}`, '', t('rCaveatBody'), '');
   return out.join('\n');
 }

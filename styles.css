@@ -119,6 +119,7 @@ button.quiet:hover:not(:disabled) { background: transparent; color: var(--ink); 
 .chip { border-color: var(--line); padding: 4px 9px; font-size: 0.82rem; font-weight: 450; }
 .chip:hover:not(:disabled) { border-color: var(--ink); }
 
+.group { display: grid; gap: 10px; }
 .scale3 { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--muted); margin-top: -6px; }
 .scale3 span:nth-child(2) { text-align: center; }
 

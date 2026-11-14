@@ -34,9 +34,16 @@ export function renderChart(svg, model) {
   const y1 = Math.max(model.endYear, a.years.at(-1));
   const hasProj = y1 > lastFit;
 
-  // projection samples
-  const proj = [];
-  if (hasProj) for (let y = lastFit; y <= y1; y++) proj.push(a.project(y, factor));
+  // projection samples: the energy balance model when one is supplied, otherwise the extended trend
+  let proj = [];
+  if (model.modelProj) {
+    const mp = model.modelProj;
+    proj = mp.years.map((year, i) => ({ year, value: mp.value[i], lo: mp.lo[i], hi: mp.hi[i] })).filter((q) => q.year <= y1);
+  } else if (hasProj) {
+    for (let y = lastFit; y <= y1; y++) proj.push(a.project(y, factor));
+  }
+  const projStart = proj.length ? proj[0].year : lastFit;
+  const projAt = (year) => proj.find((q) => q.year === year)?.value ?? null;
 
   let lo = Math.min(...a.anomalies), hi = Math.max(...a.anomalies);
   for (const p of proj) { lo = Math.min(lo, p.lo); hi = Math.max(hi, p.hi); }
@@ -63,8 +70,8 @@ export function renderChart(svg, model) {
   svg.append(el('text', { x: W - m.r, y: Y(0) - 4, class: 'c-note', 'text-anchor': 'end' }, model.baselineLabel));
 
   // projected part of the time axis
-  if (hasProj) {
-    svg.append(el('rect', { x: X(lastFit), y: m.t, width: X(y1) - X(lastFit), height: H - m.t - m.b, class: 'c-future' }));
+  if (proj.length > 1) {
+    svg.append(el('rect', { x: X(projStart), y: m.t, width: X(y1) - X(projStart), height: H - m.t - m.b, class: 'c-future' }));
     const band = proj.map((p) => `${X(p.year)},${Y(p.hi)}`).concat(proj.slice().reverse().map((p) => `${X(p.year)},${Y(p.lo)}`)).join(' ');
     svg.append(el('polygon', { points: band, fill: color, opacity: 0.22 }));
     svg.append(el('polyline', { points: proj.map((p) => `${X(p.year)},${Y(p.value)}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
@@ -94,7 +101,7 @@ export function renderChart(svg, model) {
   // timeline cursor
   if (cursorYear >= y0 && cursorYear <= y1) {
     const i = a.years.indexOf(cursorYear);
-    const v = i >= 0 && cursorYear <= a.years.at(-1) ? a.anomalies[i] : cursorYear > lastFit ? a.project(cursorYear, factor).value : null;
+    const v = i >= 0 && cursorYear <= a.years.at(-1) ? a.anomalies[i] : projAt(cursorYear);
     svg.append(el('line', { x1: X(cursorYear), x2: X(cursorYear), y1: m.t, y2: H - m.b, class: 'c-cursor' }));
     if (v != null) {
       svg.append(el('circle', { cx: X(cursorYear), cy: Y(v), r: 3.2, fill: '#fff' }));
@@ -117,7 +124,7 @@ export function renderChart(svg, model) {
     const px = ((e.clientX - r.left) / r.width) * W;
     const year = Math.round(y0 + ((px - m.l) / (W - m.l - m.r)) * (y1 - y0));
     const i = a.years.indexOf(year);
-    const v = i >= 0 ? a.anomalies[i] : year > lastFit ? a.project(year, factor).value : null;
+    const v = i >= 0 ? a.anomalies[i] : projAt(year);
     if (v == null) { hover.setAttribute('visibility', 'hidden'); return; }
     hover.setAttribute('visibility', 'visible');
     hl.setAttribute('x1', X(year)); hl.setAttribute('x2', X(year));

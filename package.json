@@ -6,7 +6,7 @@
   "description": "NASA Space Apps 2026 - 3D Earth observatory: pick a variable, see how it changes, test whether the change is significant.",
   "scripts": {
     "dev": "vercel dev",
-    "test": "node tests/stats.test.mjs",
+    "test": "node tests/stats.test.mjs && node tests/ebm.test.mjs",
     "snapshot": "node scripts/snapshot-gistemp.mjs"
   },
   "engines": {

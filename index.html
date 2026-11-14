@@ -89,14 +89,24 @@
       <label id="opacityRow"><span data-i18n="opacity"></span>
         <input id="opacity" type="range" min="0.2" max="1" step="0.02" value="0.92"></label>
       <label class="check" id="steppedRow"><input id="stepped" type="checkbox" checked><span data-i18n="stepped"></span></label>
+      <label class="check" id="gridRow"><input id="grid" type="checkbox" checked><span data-i18n="graticule"></span></label>
     </section>
 
     <section>
       <h2 data-i18n="projection"></h2>
-      <label><span data-i18n="rate"></span>
-        <input id="rate" type="range" min="0" max="2" step="0.1" value="1" list="rateMarks"></label>
-      <datalist id="rateMarks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
-      <div class="scale3"><span data-i18n="r0"></span><span data-i18n="r1"></span><span data-i18n="r2"></span></div>
+      <div class="group" id="modelControls">
+        <label><span data-i18n="scenario"></span><select id="scenario"></select></label>
+        <label><span><span data-i18n="ecs"></span> <output id="ecsOut"></output></span>
+          <input id="ecs" type="range" min="2" max="5" step="0.1" value="3" list="ecsMarks"></label>
+        <datalist id="ecsMarks"><option value="2.5"></option><option value="3"></option><option value="4"></option></datalist>
+        <div class="scale3"><span>2</span><span data-i18n="ecsLikely"></span><span>5 °C</span></div>
+      </div>
+      <div class="group" id="trendControls">
+        <label><span data-i18n="rate"></span>
+          <input id="rate" type="range" min="0" max="2" step="0.1" value="1" list="rateMarks"></label>
+        <datalist id="rateMarks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
+        <div class="scale3"><span data-i18n="r0"></span><span data-i18n="r1"></span><span data-i18n="r2"></span></div>
+      </div>
       <p class="note" id="projNote"></p>
       <label><span data-i18n="alpha"></span>
         <select id="alpha"><option value="0.1">α = 0.10</option><option value="0.05" selected>α = 0.05</option><option value="0.01">α = 0.01</option></select>

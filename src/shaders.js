@@ -57,6 +57,10 @@ uniform vec3  uMarkerDir;
 uniform float uMarkerOn;
 uniform float uPx;           // world units per pixel at distance 1
 uniform float uAtmoMix;      // atmosphere tint on the surface (natural view)
+uniform sampler2D uSim;      // energy balance model state: R = T, G = deep ocean, B = baseline offset
+uniform vec2  uSimRes;
+uniform float uSimOn;        // 1 when the displayed year is a model projection
+uniform float uGrid;         // graticule strength in the data views
 
 varying vec2 vUv;
 varying vec3 vN;
@@ -90,6 +94,30 @@ void zonal(float lat, out float val, out float refv) {
     val += w * uBands[i];
     refv += w * uBandsRef[i];
   }
+}
+
+// The model grid is coarse and stored in a float texture with nearest filtering,
+// so interpolate by hand: wrap in longitude, clamp at the poles.
+vec3 simTap(vec2 ij) {
+  vec2 uv = vec2(fract((ij.x + 0.5) / uSimRes.x), clamp((ij.y + 0.5) / uSimRes.y, 0.5 / uSimRes.y, 1.0 - 0.5 / uSimRes.y));
+  return texture2D(uSim, uv).rgb;
+}
+
+float simValue(vec2 uv) {
+  vec2 p = uv * uSimRes - 0.5;
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  vec3 s = mix(mix(simTap(i), simTap(i + vec2(1.0, 0.0)), f.x),
+               mix(simTap(i + vec2(0.0, 1.0)), simTap(i + vec2(1.0, 1.0)), f.x), f.y);
+  return s.r + s.b;
+}
+
+// 1 on the boundary between two colour classes of the diverging scale: an isotherm
+float classEdge(float t) {
+  float u = clamp(t * 0.5 + 0.5, 0.0, 1.0) * 11.0;
+  float d = abs(fract(u - 0.5) - 0.5) / max(fwidth(u), 1e-5);
+  return (1.0 - smoothstep(0.4, 1.3, d)) * step(0.02, u) * step(u, 10.98);
 }
 
 vec3 divA(float t) {
@@ -147,11 +175,18 @@ void main() {
     if (uMode < 1.5) {
       float v; float r;
       zonal(lat, v, r);
-      data = divA(v / uRange);
+      if (uSimOn > 0.5) {
+        v = simValue(vUv);
+        data = divA(v / uRange);
+        data = mix(data, data * 0.55, classEdge(v / uRange) * uStepped * 0.8);
+      } else {
+        data = divA(v / uRange);
+      }
       a = uOverlay;
     } else if (uMode < 2.5) {
       float v; float r;
       zonal(lat, v, r);
+      if (uSimOn > 0.5) v = simValue(vUv);
       float k = texture2D(uTempBase, vUv).r;
       float t = clamp(k + (v - r) * uExag / 128.0, 0.0, 1.0);
       data = texture2D(uPalette, vec2(t * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb;
@@ -162,6 +197,13 @@ void main() {
       a = s.a * uOverlay * uSatOn;
     }
     col = mix(base, data, a);
+    // graticule every 30 degrees; the equator a little stronger
+    float gy = lat / 30.0;
+    float gx = lon / 30.0;
+    float ly = 1.0 - smoothstep(0.6, 1.5, abs(fract(gy - 0.5) - 0.5) / max(fwidth(gy), 1e-5));
+    float lx = (1.0 - smoothstep(0.6, 1.5, abs(fract(gx - 0.5) - 0.5) / clamp(fwidth(gx), 1e-5, 0.5))) * smoothstep(0.08, 0.3, cos(radians(lat)));
+    float eq = 1.0 - smoothstep(0.6, 1.5, abs(lat) / max(fwidth(lat), 1e-5));
+    col = mix(col, vec3(0.0), clamp(max(ly, lx) * 0.22 + eq * 0.2, 0.0, 0.4) * uGrid);
     col = mix(col, vec3(0.03), coast * 0.6);
     col *= 0.84 + 0.16 * clamp(dot(N, V), 0.0, 1.0);
   }
@@ -260,7 +302,77 @@ export function earthUniformDefaults() {
     uMarkerOn: 0,
     uPx: 0.001,
     uAtmoMix: 1,
+    uSimRes: [64, 32],
+    uSimOn: 0,
+    uGrid: 1,
   };
 }
 
-export const EARTH_SAMPLERS = ['uDay', 'uClouds', 'uNormal', 'uSpec', 'uTempBase', 'uPalette', 'uSat', 'uRegion'];
+export const EARTH_SAMPLERS = ['uDay', 'uClouds', 'uNormal', 'uSpec', 'uTempBase', 'uPalette', 'uSat', 'uRegion', 'uSim'];
+
+// ---------------------------------------------------------------------------
+// The prediction engine: a partial differential equation solved on the GPU.
+// The state lives in a floating-point texture; each draw of this shader is one
+// explicit time step, written to a second texture, and the two are swapped
+// (the approach VisualPDE uses for its interactive simulations). The equations
+// and the discretisation are identical to the reference solver in src/ebm.js.
+// ---------------------------------------------------------------------------
+export const SIM_W = 64;
+export const SIM_H = 32;
+
+export const SIM_VERT = /* glsl */ `
+void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`;
+
+export const SIM_FRAG = /* glsl */ `
+uniform sampler2D uState;   // R = surface anomaly T, G = deep-ocean anomaly Td, B = baseline offset
+uniform sampler2D uOcean;   // R = ocean fraction of the cell
+uniform vec2  uRes;
+uniform float uInit;        // 1: write the initial state diagnosed from observations
+uniform float uDt;          // years
+uniform float uF;           // W/m2, forcing during this step
+uniform vec4  uPhys;        // D, cos(lat) floor, C land, C mixed layer
+uniform vec2  uDeep;        // C deep, gamma
+uniform float uLam[32];     // feedback per latitude row
+uniform float uT0[32];
+uniform float uTd0[32];
+uniform float uPi[32];
+
+const float PI = 3.141592653589793;
+
+float surf(vec2 px) {
+  vec2 uv = vec2(fract(px.x / uRes.x), clamp(px.y / uRes.y, 0.5 / uRes.y, 1.0 - 0.5 / uRes.y));
+  return texture2D(uState, uv).r;
+}
+
+void main() {
+  vec2 px = gl_FragCoord.xy;
+  int j = int(px.y);
+  if (uInit > 0.5) {
+    gl_FragColor = vec4(uT0[j], uTd0[j], uPi[j], 1.0);
+    return;
+  }
+  vec2 uv = px / uRes;
+  vec3 s = texture2D(uState, uv).rgb;
+  float o = texture2D(uOcean, uv).r;
+
+  float dphi = PI / uRes.y;
+  float dlam = 2.0 * PI / uRes.x;
+  float phi = -0.5 * PI + px.y * dphi;
+  float c = cos(phi);
+  float cp = max(cos(phi + 0.5 * dphi), 0.0);
+  float cm = max(cos(phi - 0.5 * dphi), 0.0);
+
+  float t = s.r;
+  float lapZ = (surf(px + vec2(1.0, 0.0)) - 2.0 * t + surf(px - vec2(1.0, 0.0))) / (dlam * dlam * max(c * c, uPhys.y * uPhys.y));
+  float lapM = (cp * (surf(px + vec2(0.0, 1.0)) - t) - cm * (t - surf(px - vec2(0.0, 1.0)))) / (dphi * dphi * c);
+
+  float ex = uDeep.y * (t - s.g);
+  float C = mix(uPhys.z, uPhys.w, o);
+  float tNew = t + uDt / C * (uF - uLam[j] * t - o * ex + uPhys.x * (lapZ + lapM));
+  float dNew = s.g + uDt / uDeep.x * ex;
+  gl_FragColor = vec4(tNew, dNew, s.b, 1.0);
+}
+`;

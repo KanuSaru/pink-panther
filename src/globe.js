@@ -2,7 +2,9 @@
 // The 3D Earth. This is the only module that touches three.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EARTH_VERT, EARTH_FRAG, ATMO_VERT, ATMO_FRAG, ATMO_SCALE, earthUniformDefaults, EARTH_SAMPLERS } from './shaders.js';
+import { EARTH_VERT, EARTH_FRAG, ATMO_VERT, ATMO_FRAG, ATMO_SCALE, earthUniformDefaults, EARTH_SAMPLERS, SIM_VERT, SIM_FRAG, SIM_W, SIM_H } from './shaders.js';
+import { createSimDriver, physUniforms } from './simdriver.js';
+import { EBM } from './ebm.js';
 import { latLonToVec3, vec3ToLatLon } from './geo.js';
 
 export function createGlobe(canvas, { onPick, onInteract } = {}) {
@@ -126,6 +128,62 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     else if (uniforms[name]) uniforms[name].value = value;
   }
 
+  // ---- prediction engine: the energy balance model, stepped on the GPU ----
+  // Two floating-point render targets hold the state; every pass is one time step.
+  function createSim() {
+    if (!renderer.extensions.has('EXT_color_buffer_float')) return null; // cannot render to float textures
+    const opts = {
+      type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+      wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
+    };
+    let front = new THREE.WebGLRenderTarget(SIM_W, SIM_H, opts);
+    let back = new THREE.WebGLRenderTarget(SIM_W, SIM_H, opts);
+    const u = {
+      uState: { value: null }, uOcean: { value: null }, uRes: { value: [SIM_W, SIM_H] },
+      uInit: { value: 0 }, uDt: { value: 0 }, uF: { value: 0 },
+      uLam: { value: new Float32Array(SIM_H) }, uT0: { value: new Float32Array(SIM_H) },
+      uTd0: { value: new Float32Array(SIM_H) }, uPi: { value: new Float32Array(SIM_H) },
+    };
+    for (const [k, v] of Object.entries(physUniforms(EBM))) u[k] = { value: v };
+    const simScene = new THREE.Scene();
+    const simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const quad = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.ShaderMaterial({ uniforms: u, vertexShader: SIM_VERT, fragmentShader: SIM_FRAG, depthTest: false, depthWrite: false }),
+    );
+    quad.frustumCulled = false;
+    simScene.add(quad);
+
+    const pass = () => {
+      u.uState.value = front.texture;
+      renderer.setRenderTarget(back);
+      renderer.render(simScene, simCamera);
+      [front, back] = [back, front];
+    };
+    const driver = createSimDriver({
+      load(c) {
+        u.uLam.value = c.lam; u.uT0.value = c.T0; u.uTd0.value = c.Td0; u.uPi.value = c.pi;
+        const tex = new THREE.DataTexture(c.oceanBytes, SIM_W, SIM_H, THREE.RGBAFormat, THREE.UnsignedByteType);
+        tex.minFilter = tex.magFilter = THREE.NearestFilter;
+        tex.needsUpdate = true;
+        u.uOcean.value?.dispose?.();
+        u.uOcean.value = tex;
+      },
+      init() { u.uInit.value = 1; pass(); u.uInit.value = 0; },
+      steps(n, dt, F) { u.uDt.value = dt; u.uF.value = F; for (let i = 0; i < n; i++) pass(); },
+    });
+    return { driver, texture: () => front.texture };
+  }
+
+  let sim = null;
+  try { sim = createSim(); } catch (e) { console.warn('GPU solver unavailable, using the CPU model', e); sim = null; }
+  const simApi = {
+    supported: !!sim,
+    configure(c) { if (sim) { sim.driver.configure(c); renderer.setRenderTarget(null); uniforms.uSim.value = sim.texture(); } },
+    setTarget(y) { sim?.driver.setTarget(y); },
+    get year() { return sim ? sim.driver.year : null; },
+  };
+
   // ---- camera flight ----
   let fly = null;
   function flyTo(lat, lon, distance) {
@@ -190,10 +248,18 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     // clouds thin out as you approach, so the surface and the data stay readable
     uniforms.uCloudAmt.value = Math.max(0.12, Math.min(0.85, (camera.position.length() - 1.5) / 1.6));
 
+    // let the model run towards the selected year, a couple of model years per frame
+    if (sim && sim.driver.ready) {
+      try {
+        if (sim.driver.tick(2)) uniforms.uSim.value = sim.texture();
+      } catch (e) { console.warn('GPU solver stopped', e); sim = null; uniforms.uSimOn.value = 0; }
+      renderer.setRenderTarget(null);
+    }
+
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
-  return { set, setImage, setData, flyTo, zoomOut, pick, stopSpin };
+  return { set, setImage, setData, flyTo, zoomOut, pick, stopSpin, sim: simApi };
 }
