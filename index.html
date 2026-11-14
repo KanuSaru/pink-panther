@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Intelligent Earth Observatory</title>
+  <meta name="description" content="Pick an Earth science variable, watch it change on a 3D globe, and test whether the change is statistically significant. Data from NASA POWER, GISTEMP and GIBS.">
+  <meta name="theme-color" content="#000000">
+  <meta name="generator" content="Code generated with Claude (Anthropic), a large language model, directed by the team. NASA Space Apps Challenge 2026 SI disclosure.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="globe" aria-label="Interactive globe of the Earth"></canvas>
+
+  <header class="bar">
+    <div class="brand">
+      <h1 data-i18n="title">Intelligent Earth Observatory</h1>
+      <p data-i18n="tagline"></p>
+    </div>
+    <div class="bar-actions">
+      <div class="seg small" id="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="es">ES</button>
+      </div>
+      <button type="button" class="quiet" id="aboutBtn" data-i18n="about"></button>
+    </div>
+  </header>
+
+  <main class="panels">
+  <aside class="panel controls" id="controls">
+    <section>
+      <h2 data-i18n="what"></h2>
+      <select id="variable" aria-labelledby="variable-label"></select>
+      <p class="define" id="varAbout"></p>
+      <p class="note" data-i18n="whatNote"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="where"></h2>
+      <p class="note" data-i18n="whereHint"></p>
+      <p class="sub" data-i18n="examples"></p>
+      <div class="chips" id="places"></div>
+      <div class="row2">
+        <label><span data-i18n="lat"></span><input id="lat" type="number" step="0.01" min="-90" max="90" inputmode="decimal"></label>
+        <label><span data-i18n="lon"></span><input id="lon" type="number" step="0.01" min="-180" max="180" inputmode="decimal"></label>
+      </div>
+      <button type="button" id="goPoint" data-i18n="go"></button>
+      <button type="button" id="goRegion" data-i18n="region" disabled></button>
+      <p class="note" id="regionNote"></p>
+      <button type="button" class="quiet" id="goPlanet" data-i18n="planet"></button>
+    </section>
+
+    <section>
+      <h2 data-i18n="when"></h2>
+      <div class="row2">
+        <label><span data-i18n="from"></span><input id="from" type="number" step="1" inputmode="numeric"></label>
+        <label><span data-i18n="to"></span><input id="to" type="number" step="1" inputmode="numeric"></label>
+      </div>
+      <label><span data-i18n="season"></span><select id="season"></select></label>
+    </section>
+
+    <section>
+      <h2 data-i18n="view"></h2>
+      <div class="seg" id="view" role="group">
+        <button type="button" data-view="natural" data-i18n="v_natural"></button>
+        <button type="button" data-view="anomaly" data-i18n="v_anomaly"></button>
+        <button type="button" data-view="temperature" data-i18n="v_temperature"></button>
+        <button type="button" data-view="satellite" data-i18n="v_satellite"></button>
+      </div>
+      <p class="note" id="viewHint"></p>
+      <label id="scaleRow"><span data-i18n="scale"></span>
+        <select id="scale"></select>
+      </label>
+      <label id="monthRow"><span data-i18n="month"></span><select id="month"></select></label>
+      <label id="exagRow"><span><span data-i18n="exag"></span> <output id="exagOut"></output></span>
+        <input id="exag" type="range" min="1" max="20" step="1" value="10"></label>
+      <label id="opacityRow"><span data-i18n="opacity"></span>
+        <input id="opacity" type="range" min="0.2" max="1" step="0.02" value="0.92"></label>
+      <label class="check" id="steppedRow"><input id="stepped" type="checkbox" checked><span data-i18n="stepped"></span></label>
+    </section>
+
+    <section>
+      <h2 data-i18n="projection"></h2>
+      <label><span data-i18n="rate"></span>
+        <input id="rate" type="range" min="0" max="2" step="0.1" value="1" list="rateMarks"></label>
+      <datalist id="rateMarks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
+      <div class="scale3"><span data-i18n="r0"></span><span data-i18n="r1"></span><span data-i18n="r2"></span></div>
+      <p class="note" id="projNote"></p>
+      <label><span data-i18n="alpha"></span>
+        <select id="alpha"><option value="0.1">α = 0.10</option><option value="0.05" selected>α = 0.05</option><option value="0.01">α = 0.01</option></select>
+      </label>
+    </section>
+  </aside>
+
+  <aside class="panel findings" id="findings" aria-live="polite">
+    <p class="scope" id="scope"></p>
+    <p class="status" id="status" hidden></p>
+    <div id="result" hidden>
+      <p class="verdict" id="verdict"></p>
+      <p class="verdict2" id="verdict2"></p>
+      <dl class="facts" id="facts"></dl>
+      <figure id="chartWrap">
+        <figcaption id="chartTitle"></figcaption>
+        <svg id="chart" class="chart"></svg>
+        <ul class="key" id="chartKey"></ul>
+      </figure>
+      <div id="bandsWrap">
+        <h3 data-i18n="bands"></h3>
+        <table class="bands" id="bands"></table>
+      </div>
+      <details id="detailsWrap">
+        <summary data-i18n="details"></summary>
+        <dl class="details" id="details"></dl>
+      </details>
+      <div class="actions">
+        <button type="button" id="download" data-i18n="report"></button>
+        <button type="button" class="quiet" id="copy" data-i18n="copy"></button>
+      </div>
+      <p class="note" id="sourceLine"></p>
+    </div>
+  </aside>
+
+  </main>
+
+  <div class="legend" id="legend" hidden></div>
+
+  <footer class="timeline">
+    <button type="button" id="play" class="play" data-i18n-title="play"><span aria-hidden="true"></span></button>
+    <div class="track" id="track">
+      <input type="range" id="year" min="1880" max="2100" step="1" data-i18n-title="timeline">
+      <div class="track-marks" id="trackMarks" aria-hidden="true"></div>
+    </div>
+    <div class="year-readout"><output id="yearOut" for="year"></output><span id="yearKind"></span></div>
+  </footer>
+
+  <dialog id="about">
+    <h2 data-i18n="about"></h2>
+    <p data-i18n="aboutBody"></p>
+    <h3 data-i18n="credits"></h3>
+    <ul class="credits" id="credits"></ul>
+    <p class="note" data-i18n="siNote"></p>
+    <form method="dialog"><button data-i18n="close"></button></form>
+  </dialog>
+
+  <noscript>This application needs JavaScript and WebGL.</noscript>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

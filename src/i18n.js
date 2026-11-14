@@ -1,0 +1,194 @@
+// SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team.
+// Interface text in Spanish and English.
+const es = {
+  title: 'Observatorio Inteligente de la Tierra',
+  tagline: 'Elige una variable, mira cómo cambia y comprueba si el cambio es significativo.',
+  what: 'Qué estudiar',
+  whatNote: 'Datos mensuales de NASA POWER (reanálisis MERRA-2), desde 1981.',
+  where: 'Dónde',
+  whereHint: 'Haz clic en cualquier punto del globo, escribe coordenadas o abre un ejemplo.',
+  examples: 'Ejemplos para empezar',
+  lat: 'Latitud', lon: 'Longitud', go: 'Analizar este punto',
+  region: 'Analizar la región alrededor', regionNote: 'Calcula la tendencia en cada celda de una caja de {s}° × {s}°.',
+  planet: 'Ver el planeta',
+  when: 'Cuándo',
+  from: 'Desde', to: 'Hasta', season: 'Meses',
+  s_ANN: 'Todo el año', s_DJF: 'Diciembre a febrero', s_MAM: 'Marzo a mayo', s_JJA: 'Junio a agosto', s_SON: 'Septiembre a noviembre',
+  view: 'Vista del globo',
+  v_natural: 'Natural', v_anomaly: 'Anomalía', v_temperature: 'Temperatura', v_satellite: 'Satélite',
+  vh_natural: 'La Tierra como se ve desde el espacio.',
+  vh_anomaly: 'Diferencia de temperatura respecto a 1951–1980 en ocho franjas de latitud (NASA GISTEMP).',
+  vh_temperature: 'Temperatura de la superficie, desplazada según el cambio de cada franja de latitud.',
+  vh_satellite: 'Imagen mensual de NASA GIBS para la variable elegida.',
+  noSat: 'No hay una capa de imágenes para esta variable. Elige otra variable u otra vista.',
+  satFail: 'NASA GIBS no devolvió una imagen para {d}. Prueba otro año.',
+  satLoading: 'Cargando imagen de NASA GIBS…',
+  month: 'Mes',
+  opacity: 'Opacidad de los datos', stepped: 'Colores por clases', exag: 'Exagerar el cambio',
+  projection: 'Proyección',
+  projNote: 'Después de {y}, el globo y la gráfica extienden la tendencia observada. Es una extrapolación estadística, no un modelo climático.',
+  rate: 'Si el ritmo de cambio…', r0: 'se detiene', r1: 'sigue igual', r2: 'se duplica',
+  alpha: 'Nivel de significancia',
+  timeline: 'Año', play: 'Reproducir', pause: 'Pausar', observed: 'observado', projected: 'proyección',
+  scopePlanet: 'Planeta', scopePoint: 'Punto', scopeRegion: 'Región',
+  globalMean: 'media global', tempAnom: 'Temperatura de la superficie',
+  loadingPower: 'Consultando NASA POWER…', loadingRegion: 'Consultando la región en NASA POWER…', loadingGistemp: 'Consultando NASA GISTEMP…',
+  sampling: 'Muestreando la región punto a punto ({a} de {b})…',
+  errPower: 'NASA POWER no respondió: {m}. Vuelve a intentarlo en unos segundos.',
+  errGistemp: 'No se pudo leer NASA GISTEMP: {m}. La vista del planeta necesita el proxy /api/gistemp (funciona en Vercel o con «vercel dev»). El análisis por punto sigue disponible.',
+  errShort: 'Hay muy pocos años con datos en este período para calcular una tendencia. Amplía el período.',
+  errOcean: 'Sin datos válidos para esta variable en este punto.',
+  up: 'aumenta', down: 'disminuye',
+  vSig: '{v} {dir} {x} por década {p}.',
+  vSig2: 'El cambio es estadísticamente significativo (p {p}).',
+  vNo: '{v} no muestra una tendencia significativa {p}.',
+  vNo2: 'La pendiente estimada es {x} por década, pero podría deberse al azar (p {p}). Con más años de datos podría confirmarse.',
+  vRegion: '{up} de {n} celdas aumentan y {down} disminuyen de forma significativa.',
+  vRegionOpp: 'La misma variable cambia en sentidos opuestos dentro de esta región.',
+  vRegionNone: 'Ninguna de las {n} celdas muestra una tendencia significativa.',
+  qWhat: 'Qué cambia', qWhere: 'Dónde', qHow: 'Cuánto', qSig: '¿Es significativo?',
+  perDecade: 'por década', ci: 'IC {c} %: {a} a {b}', total: '{x} entre {a} y {b}',
+  yes: 'Sí', no: 'No', mkLine: 'Mann-Kendall, p {p} ({op} {a})',
+  regionBox: 'Caja {a} a {b} de latitud, {c} a {d} de longitud',
+  regionMean: 'Media de la región: {x} por década', regionRange: 'De {a} ({pa}) a {b} ({pb})',
+  regionSig: '{k} de {n} celdas ({pc} %) con p < {a}', regionFdr: '{k} siguen siendo significativas al controlar la tasa de falsos descubrimientos (Benjamini-Hochberg).',
+  sampledNote: 'La consulta regional falló; se usó una malla de {n} puntos.',
+  details: 'Detalles del cálculo',
+  dSen: 'Pendiente de Theil-Sen', dMk: 'Mann-Kendall', dOls: 'Regresión lineal', dAuto: 'Autocorrelación (lag 1)',
+  dAutoYes: 'corregida (n efectivo {n})', dAutoNo: 'sin corrección necesaria',
+  dBase: 'Media de referencia', dCompare: 'Comparación de períodos', dUnusual: 'Años inusuales', none: 'ninguno',
+  dN: 'Años analizados',
+  compareLine: '{a}: {ma} · {b}: {mb} · diferencia {d} (p {p})',
+  bands: 'Tendencia por franja de latitud', band: 'Franja', trend: 'Tendencia',
+  chartObs: 'observado', chartTrend: 'tendencia', chartProj: 'proyección e intervalo de predicción', chartUnusual: 'año inusual',
+  chartBase: 'media {a}–{b}', chartAnom: 'Diferencia respecto a la media {a}–{b}',
+  report: 'Descargar informe', copy: 'Copiar informe', copied: 'Informe copiado',
+  source: 'Fuente', fetched: 'consultado {d}', snapshot: 'copia local',
+  legendAnom: 'Anomalía de temperatura (°C, respecto a 1951–1980)', legendTemp: 'Temperatura de la superficie',
+  legendRegion: 'Tendencia en la región ({u} por década)', legendHatch: 'tramado: no significativo',
+  legendSat: 'NASA GIBS',
+  tempNote: 'Campo base decodificado de la imagen de temperatura de NASA aportada por el equipo; valores aproximados.',
+  about: 'Acerca de', aboutBody: 'Prototipo para NASA Space Apps Challenge 2026. Las tendencias se estiman con la pendiente de Theil-Sen y se prueban con Mann-Kendall, corrigiendo la autocorrelación. Las proyecciones extienden la tendencia lineal y muestran un intervalo de predicción; no sustituyen a los modelos climáticos.',
+  rTitle: 'Informe de cambio', rGenerated: 'Generado el {d}', rQuestion: 'Pregunta', rAnswer: 'Respuesta',
+  rMethod: 'Método', rMethodBody: 'Serie anual construida a partir de datos mensuales. Tendencia: pendiente de Theil-Sen. Significancia: prueba de Mann-Kendall con corrección de varianza por autocorrelación (Yue y Wang, 2004). Proyección: extrapolación de la regresión lineal con intervalo de predicción. En regiones, la significancia de campo se controla con Benjamini-Hochberg.',
+  rCaveat: 'Límites', rCaveatBody: 'Una tendencia significativa no identifica su causa. Las proyecciones son extrapolaciones estadísticas y no un modelo climático. MERRA-2 es un reanálisis con celdas de unos 50 km: no representa microclimas.',
+  rProj: 'Proyección a {y}', rProjLine: '{v} (intervalo de predicción {a} a {b}) respecto a la media de referencia, con ritmo ×{f}',
+  scale: 'Escala de color', credits: 'Datos y créditos', close: 'Cerrar',
+  siNote: 'Uso de SI: el código de esta aplicación y el campo de temperatura derivado se generaron con Claude (Anthropic), un modelo de lenguaje, bajo la dirección del equipo. Ninguna imagen fue generada con SI.',
+  pPlanet: 'en todo el planeta', pAt: 'en {x}', pIn: 'en {x}',
+  sigYes: 'significativa', sigNo: 'no significativa',
+  legendExag: 'Cambio exagerado ×{n} para hacerlo visible.',
+  webglFail: 'Este navegador no pudo iniciar WebGL, necesario para el globo 3D.',
+};
+
+const en = {
+  title: 'Intelligent Earth Observatory',
+  tagline: 'Pick a variable, watch it change, and test whether the change is significant.',
+  what: 'What to study',
+  whatNote: 'Monthly data from NASA POWER (MERRA-2 reanalysis), since 1981.',
+  where: 'Where',
+  whereHint: 'Click anywhere on the globe, type coordinates, or open an example.',
+  examples: 'Examples to start with',
+  lat: 'Latitude', lon: 'Longitude', go: 'Analyze this point',
+  region: 'Analyze the surrounding region', regionNote: 'Computes the trend in every cell of a {s}° × {s}° box.',
+  planet: 'View the planet',
+  when: 'When',
+  from: 'From', to: 'To', season: 'Months',
+  s_ANN: 'Whole year', s_DJF: 'December to February', s_MAM: 'March to May', s_JJA: 'June to August', s_SON: 'September to November',
+  view: 'Globe view',
+  v_natural: 'Natural', v_anomaly: 'Anomaly', v_temperature: 'Temperature', v_satellite: 'Satellite',
+  vh_natural: 'Earth as seen from space.',
+  vh_anomaly: 'Temperature difference from 1951–1980 in eight latitude bands (NASA GISTEMP).',
+  vh_temperature: 'Surface temperature, shifted by the change in each latitude band.',
+  vh_satellite: 'Monthly NASA GIBS image for the selected variable.',
+  noSat: 'There is no imagery layer for this variable. Choose another variable or view.',
+  satFail: 'NASA GIBS returned no image for {d}. Try another year.',
+  satLoading: 'Loading NASA GIBS image…',
+  month: 'Month',
+  opacity: 'Data opacity', stepped: 'Classed colors', exag: 'Exaggerate the change',
+  projection: 'Projection',
+  projNote: 'After {y}, the globe and chart extend the observed trend. This is a statistical extrapolation, not a climate model.',
+  rate: 'If the rate of change…', r0: 'stops', r1: 'stays the same', r2: 'doubles',
+  alpha: 'Significance level',
+  timeline: 'Year', play: 'Play', pause: 'Pause', observed: 'observed', projected: 'projection',
+  scopePlanet: 'Planet', scopePoint: 'Point', scopeRegion: 'Region',
+  globalMean: 'global mean', tempAnom: 'Surface temperature',
+  loadingPower: 'Querying NASA POWER…', loadingRegion: 'Querying the region on NASA POWER…', loadingGistemp: 'Querying NASA GISTEMP…',
+  sampling: 'Sampling the region point by point ({a} of {b})…',
+  errPower: 'NASA POWER did not respond: {m}. Try again in a few seconds.',
+  errGistemp: 'Could not read NASA GISTEMP: {m}. The planet view needs the /api/gistemp proxy (it works on Vercel or with "vercel dev"). Point analysis is still available.',
+  errShort: 'Too few years with data in this period to compute a trend. Widen the period.',
+  errOcean: 'No valid data for this variable at this point.',
+  up: 'is rising', down: 'is falling',
+  vSig: '{v} {dir} {x} per decade {p}.',
+  vSig2: 'The change is statistically significant (p {p}).',
+  vNo: '{v} shows no significant trend {p}.',
+  vNo2: 'The estimated slope is {x} per decade, but it could be due to chance (p {p}). More years of data could confirm it.',
+  vRegion: '{up} of {n} cells are rising and {down} are falling significantly.',
+  vRegionOpp: 'The same variable is changing in opposite directions inside this region.',
+  vRegionNone: 'None of the {n} cells shows a significant trend.',
+  qWhat: 'What is changing', qWhere: 'Where', qHow: 'How much', qSig: 'Is it significant?',
+  perDecade: 'per decade', ci: '{c}% CI: {a} to {b}', total: '{x} between {a} and {b}',
+  yes: 'Yes', no: 'No', mkLine: 'Mann-Kendall, p {p} ({op} {a})',
+  regionBox: 'Box {a} to {b} latitude, {c} to {d} longitude',
+  regionMean: 'Region mean: {x} per decade', regionRange: 'From {a} ({pa}) to {b} ({pb})',
+  regionSig: '{k} of {n} cells ({pc}%) with p < {a}', regionFdr: '{k} remain significant after controlling the false discovery rate (Benjamini-Hochberg).',
+  sampledNote: 'The regional query failed; a grid of {n} points was used instead.',
+  details: 'Calculation details',
+  dSen: 'Theil-Sen slope', dMk: 'Mann-Kendall', dOls: 'Linear regression', dAuto: 'Autocorrelation (lag 1)',
+  dAutoYes: 'corrected (effective n {n})', dAutoNo: 'no correction needed',
+  dBase: 'Reference mean', dCompare: 'Period comparison', dUnusual: 'Unusual years', none: 'none',
+  dN: 'Years analyzed',
+  compareLine: '{a}: {ma} · {b}: {mb} · difference {d} (p {p})',
+  bands: 'Trend by latitude band', band: 'Band', trend: 'Trend',
+  chartObs: 'observed', chartTrend: 'trend', chartProj: 'projection and prediction interval', chartUnusual: 'unusual year',
+  chartBase: '{a}–{b} mean', chartAnom: 'Difference from the {a}–{b} mean',
+  report: 'Download report', copy: 'Copy report', copied: 'Report copied',
+  source: 'Source', fetched: 'retrieved {d}', snapshot: 'local copy',
+  legendAnom: 'Temperature anomaly (°C, relative to 1951–1980)', legendTemp: 'Surface temperature',
+  legendRegion: 'Trend in the region ({u} per decade)', legendHatch: 'hatched: not significant',
+  legendSat: 'NASA GIBS',
+  tempNote: 'Base field decoded from the NASA temperature image supplied by the team; values are approximate.',
+  about: 'About', aboutBody: 'Prototype for the NASA Space Apps Challenge 2026. Trends are estimated with the Theil-Sen slope and tested with Mann-Kendall, corrected for autocorrelation. Projections extend the linear trend and show a prediction interval; they do not replace climate models.',
+  rTitle: 'Change report', rGenerated: 'Generated on {d}', rQuestion: 'Question', rAnswer: 'Answer',
+  rMethod: 'Method', rMethodBody: 'Annual series built from monthly data. Trend: Theil-Sen slope. Significance: Mann-Kendall test with variance correction for autocorrelation (Yue and Wang, 2004). Projection: extrapolation of the linear regression with a prediction interval. For regions, field significance is controlled with Benjamini-Hochberg.',
+  rCaveat: 'Limits', rCaveatBody: 'A significant trend does not identify its cause. Projections are statistical extrapolations, not a climate model. MERRA-2 is a reanalysis with cells of about 50 km: it does not resolve microclimates.',
+  rProj: 'Projection to {y}', rProjLine: '{v} (prediction interval {a} to {b}) relative to the reference mean, at rate ×{f}',
+  scale: 'Color scale', credits: 'Data and credits', close: 'Close',
+  siNote: 'SI use: the code of this application and the derived temperature field were generated with Claude (Anthropic), a large language model, directed by the team. No images were generated with SI.',
+  pPlanet: 'across the planet', pAt: 'at {x}', pIn: 'in {x}',
+  sigYes: 'significant', sigNo: 'not significant',
+  legendExag: 'Change exaggerated ×{n} to make it visible.',
+  webglFail: 'This browser could not start WebGL, which the 3D globe needs.',
+};
+
+const dict = { es, en };
+let lang = 'en';
+
+export const getLang = () => lang;
+export function setLang(l) { lang = dict[l] ? l : 'en'; document.documentElement.lang = lang; }
+
+export function t(key, vars) {
+  let s = dict[lang][key] ?? dict.en[key] ?? key;
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, v);
+  return s;
+}
+
+// Fill every element that declares data-i18n (text) or data-i18n-title
+export function applyStatic(root = document) {
+  root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n, el.dataset.i18nVars ? JSON.parse(el.dataset.i18nVars) : undefined); });
+  root.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
+}
+
+export function num(v, decimals = 2, { sign = false } = {}) {
+  if (!isFinite(v)) return '–';
+  const s = Math.abs(v).toLocaleString(lang, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const zero = Number(Math.abs(v).toFixed(decimals)) === 0;
+  return (v < 0 && !zero ? '−' : sign && !zero ? '+' : '') + s;
+}
+
+export function pText(p) {
+  if (!isFinite(p)) return '–';
+  if (p < 0.001) return '< ' + (0.001).toLocaleString(lang, { minimumFractionDigits: 3 });
+  return '= ' + p.toLocaleString(lang, { minimumFractionDigits: p < 0.01 ? 4 : 3, maximumFractionDigits: p < 0.01 ? 4 : 3 });
+}

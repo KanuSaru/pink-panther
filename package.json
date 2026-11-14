@@ -1,0 +1,16 @@
+{
+  "name": "intelligent-earth-observatory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NASA Space Apps 2026 - 3D Earth observatory: pick a variable, see how it changes, test whether the change is significant.",
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node tests/stats.test.mjs",
+    "snapshot": "node scripts/snapshot-gistemp.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "siDisclosure": "Code and the derived data file assets/temp_base.png were generated with Claude (Anthropic), a large language model, directed by the team. No SI-generated images, audio or video."
+}
