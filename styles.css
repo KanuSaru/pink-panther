@@ -86,6 +86,7 @@ h2 { font-size: 1rem; font-weight: 650; font-stretch: 86%; }
 h3 { font-size: 0.93rem; font-weight: 650; font-stretch: 86%; margin: 20px 0 8px; }
 .define { font-size: 0.9rem; line-height: 1.35; }
 .sub { font-size: 0.86rem; color: var(--muted); margin-bottom: -4px; }
+.planet-var { color: var(--ink); border-left: 2px solid var(--line); padding-left: 8px; }
 .note { color: var(--muted); font-size: 0.86rem; line-height: 1.4; }
 
 label { display: grid; gap: 4px; font-size: 0.86rem; color: var(--muted); }

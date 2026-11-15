@@ -3,8 +3,10 @@
 // Checks the energy balance model against cases with known answers.
 // The "observations" here are synthetic, shaped like the GISTEMP zonal record.
 import assert from 'node:assert/strict';
-import { EBM, makeGrid, fitBands, bandsToRows, rowsToBands, equilibriumMean, stableDt, calibrate, project, Model, forcingAt } from '../src/ebm.js';
+import { EBM, makeGrid, fitBands, bandsToRows, rowsToBands, equilibriumMean, stableDt, calibrate, project, Model, forcingAt, recentState } from '../src/ebm.js';
 import { ols } from '../src/stats.js';
+import { parseGistempZonal } from '../src/analysis.js';
+import { readFileSync } from 'node:fs';
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} expected ${b}, got ${a}`);
 let n = 0;
@@ -100,7 +102,10 @@ test('calibration closes today\'s global energy budget and hits the requested se
     near(c.ecsModel, ecs, 1e-3, `ECS ${ecs}`);
     near(c.F0, c.N0 + c.lamG * c.meanT0, 1e-9);      // forcing = imbalance + radiative response
     assert.ok(c.N0 > 0.4 && c.N0 < 1.6, `imbalance ${c.N0}`);
-    assert.ok(c.F0 > 1.9 && c.F0 < 4.2, `forcing ${c.F0}`);
+    assert.ok(c.F0 > 1 && c.F0 < 5, `forcing ${c.F0} at ECS ${ecs}`); // real-data bounds are tested below
+    // local feedbacks stay inside their limits; the rest goes to ocean uptake
+    assert.ok(c.lam.every((v) => v >= EBM.LAMBDA_RANGE[0] - 1e-9 && v <= EBM.LAMBDA_RANGE[1] + 1e-9));
+    assert.ok(c.gam.every((v) => v >= EBM.GAMMA - 1e-9 && v <= EBM.GAMMA_MAX + 1e-9));
   }
 });
 
@@ -145,6 +150,60 @@ test('grid resolution barely changes the global mean', () => {
 test('forcing pathway is a straight line from today to the 2100 level', () => {
   const cal = { t0: 2025, F0: 3 };
   near(forcingAt(2025, cal, 4.5), 3, 1e-12); near(forcingAt(2100, cal, 4.5), 4.5, 1e-12); near(forcingAt(2062.5, cal, 4.5), 3.75, 1e-12);
+});
+
+test('today\'s state comes from the recent record, whatever the analysis period', () => {
+  // accelerating warming: a long straight line would put today far below the last values
+  const years = [], b = [];
+  for (let y = 1880; y <= 2025; y++) { years.push(y); b.push(y < 1970 ? 0 : 0.0003 * (y - 1970) ** 2); }
+  const r = recentState(years, [b])[0];
+  near(r.present, b.at(-1), 0.05);                 // within 0.05 K of the curve today
+  near(r.rate, 2 * 0.0003 * (2010.5 - 1970), 0.002); // slope of the curve at the window centre
+});
+
+test('per-row ocean exchange still conserves heat and does not change the sensitivity', () => {
+  const c = calibrate({ obs, ocean: o16, W: 32, H: 16, ecs: 3 });
+  const g = c.g, m = new Model({ ...c, lam: new Float64Array(16), gam: Float64Array.from({ length: 16 }, (_, j) => 1 + j * 0.3) }, o16);
+  for (let k = 0; k < m.T.length; k++) { m.T[k] = 1 + Math.sin(k); m.Td[k] = 0.2; }
+  const heat = () => { let s = 0; for (let j = 0; j < 16; j++) for (let i = 0; i < 32; i++) { const k = j * 32 + i; s += (g.w[j] / 32) * ((EBM.C_LAND + (EBM.C_MIX - EBM.C_LAND) * o16[k]) * m.T[k] + o16[k] * EBM.C_DEEP * m.Td[k]); } return s; };
+  const h0 = heat();
+  m.step(2000, stableDt(g, 0, 1 + 15 * 0.3), 0);
+  near(heat(), h0, 1e-9);
+  near(c.ecsModel, 3, 1e-3);
+});
+
+// Performance guards: the interface recalibrates on every scenario or sensitivity change
+// (three CPU runs plus one GPU calibration), so these must stay fast.
+test('performance: calibration and the three projections fit in an interactive budget', () => {
+  const t0 = performance.now();
+  for (const ecs of [2.5, 3, 4]) project(calibrate({ obs, ocean: o16, W: 32, H: 16, ecs }), o16, 4.5);
+  const o32 = oceanGrid(64, 32);
+  calibrate({ obs, ocean: o32, W: 64, H: 32, ecs: 3 });
+  const ms = performance.now() - t0;
+  console.log(`    recalibration took ${ms.toFixed(0)} ms`);
+  assert.ok(ms < 1500, `recalibration took ${ms.toFixed(0)} ms (budget 1500)`);
+});
+
+test('performance: the GPU time step keeps the step count per model year bounded', () => {
+  // each model year costs ceil(1/dt) shader passes; the frame loop runs two model years
+  const c = calibrate({ obs, ocean: oceanGrid(64, 32), W: 64, H: 32, ecs: 3 });
+  const passes = Math.ceil(1 / c.dt);
+  assert.ok(passes <= 600, `${passes} passes per model year (budget 600)`);
+});
+
+test('on the real GISTEMP record, the diagnosed forcing and imbalance match IPCC AR6', () => {
+  const g = parseGistempZonal(readFileSync(new URL('../data/gistemp-zonal.csv', import.meta.url), 'utf8'));
+  const now = recentState(g.years, g.bands);
+  const real = { years: g.years, bands: g.bands, present: now.map((b) => b.present), rate: now.map((b) => b.rate) };
+  const c = calibrate({ obs: real, ocean: o16, W: 32, H: 16, ecs: 3 });
+  // AR6 WG1: forcing 2.72 [1.96 to 3.48] W/m2 in 2019; imbalance 0.79 [0.52 to 1.06] W/m2 for 2006-2018
+  assert.ok(c.F0 > 1.96 && c.F0 < 3.48, `forcing ${c.F0}`);
+  assert.ok(c.N0 > 0.52 && c.N0 < 1.2, `imbalance ${c.N0}`); // a little above AR6: the imbalance has kept rising
+  // the projection continues from today without a jump
+  const p = project(c, o16, 4.5);
+  const last5 = g.global.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  assert.ok(Math.abs(p.global[0] - last5) < 0.15, `model starts at ${p.global[0]}, last five years average ${last5}`);
+  console.log(`    real record: forcing ${c.F0.toFixed(2)} W/m2, imbalance ${c.N0.toFixed(2)} W/m2, 2100 at 4.5 W/m2: +${p.warmingSincePI.toFixed(2)} K`);
 });
 
 console.log(`\n${n} tests passed`);

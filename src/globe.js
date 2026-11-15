@@ -141,7 +141,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     const u = {
       uState: { value: null }, uOcean: { value: null }, uRes: { value: [SIM_W, SIM_H] },
       uInit: { value: 0 }, uDt: { value: 0 }, uF: { value: 0 },
-      uLam: { value: new Float32Array(SIM_H) }, uT0: { value: new Float32Array(SIM_H) },
+      uLam: { value: new Float32Array(SIM_H) }, uGam: { value: new Float32Array(SIM_H).fill(EBM.GAMMA) }, uT0: { value: new Float32Array(SIM_H) },
       uTd0: { value: new Float32Array(SIM_H) }, uPi: { value: new Float32Array(SIM_H) },
     };
     for (const [k, v] of Object.entries(physUniforms(EBM))) u[k] = { value: v };
@@ -162,7 +162,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     };
     const driver = createSimDriver({
       load(c) {
-        u.uLam.value = c.lam; u.uT0.value = c.T0; u.uTd0.value = c.Td0; u.uPi.value = c.pi;
+        u.uLam.value = c.lam; u.uGam.value = c.gam; u.uT0.value = c.T0; u.uTd0.value = c.Td0; u.uPi.value = c.pi;
         const tex = new THREE.DataTexture(c.oceanBytes, SIM_W, SIM_H, THREE.RGBAFormat, THREE.UnsignedByteType);
         tex.minFilter = tex.magFilter = THREE.NearestFilter;
         tex.needsUpdate = true;

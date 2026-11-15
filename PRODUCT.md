@@ -54,7 +54,7 @@ The tool does not stop at showing a change. It tests it: Theil-Sen slope with a 
 ## Evidence on Hand
 
 - Live NASA data for every number shown; nothing is mocked.
-- 15 tests of the statistics (`tests/stats.test.mjs`) and 11 of the energy balance model (`tests/ebm.test.mjs`).
+- 22 tests of the statistics (`tests/stats.test.mjs`), 16 of the energy balance model (`tests/ebm.test.mjs`, including a check against IPCC AR6 values on the real GISTEMP record and performance budgets) and 5 static shader guards (`tests/shaders.test.mjs`).
 - Six worked examples in `src/config.js` (Barranquilla, Svalbard, the Sahel, the Amazon, the Aral Sea, Siberia).
 - No user testimonials, usage numbers or external reviews exist. Do not invent any.
 

@@ -5,7 +5,7 @@ import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POW
 import { fetchPoint, fetchPointAll, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
 import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES, zonalBlend, screenVariables, seasonBreakdown, comparePlaces } from './analysis.js';
 import { mean } from './stats.js';
-import { EBM, calibrate, project } from './ebm.js';
+import { EBM, calibrate, project, recentState } from './ebm.js';
 import { SIM_W, SIM_H } from './shaders.js';
 import { latLonToVec3, formatLatLon, boxAround, clamp } from './geo.js';
 import { renderChart } from './chart.js';
@@ -451,16 +451,13 @@ function recomputeModel() {
   const g = state.gistemp;
   if (!g || !state.ocean || state.bands.length !== 8 || !state.bands.every(Boolean)) { state.model = null; return; }
   // nothing the model depends on has changed: keep the current run
-  const key = [state.period, state.scenario, state.ecs, g.years.length].join('|');
+  // the model does not depend on the analysis period: it starts from the recent record
+  const key = [state.scenario, state.ecs, g.years.length, g.global.at(-1)].join('|');
   if (state.model && state.model.key === key) return;
   state.model = null;
   try {
-    const last = g.years.at(-1);
-    const obs = {
-      years: g.years, bands: g.bands,
-      present: state.bands.map((b) => b.fit.predict(last) + b.base),
-      rate: state.bands.map((b) => b.fit.slope),
-    };
+    const now = recentState(g.years, g.bands);
+    const obs = { years: g.years, bands: g.bands, present: now.map((b) => b.present), rate: now.map((b) => b.rate) };
     const run = (ecs) => {
       const cal = calibrate({ obs, ocean: state.ocean.cpu, W: 32, H: 16, ecs });
       return { cal, proj: cal.ok ? project(cal, state.ocean.cpu, state.scenario) : null };
@@ -474,7 +471,7 @@ function recomputeModel() {
       if (cal.ok) {
         globe.sim.configure({
           t0: cal.t0, F0: cal.F0, f2100: state.scenario, dt: cal.dt,
-          lam: Float32Array.from(cal.lam), T0: Float32Array.from(cal.T0), Td0: Float32Array.from(cal.Td0), pi: Float32Array.from(cal.piRows),
+          lam: Float32Array.from(cal.lam), gam: Float32Array.from(cal.gam), T0: Float32Array.from(cal.T0), Td0: Float32Array.from(cal.Td0), pi: Float32Array.from(cal.piRows),
           oceanBytes: state.ocean.gpuBytes,
         });
         state.model.gpu = true;
@@ -730,6 +727,8 @@ function renderAll() {
   document.title = t('title');
   $('lang').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === getLang()));
   $('varAbout').textContent = variable().about[getLang()];
+  // the planet result is always NASA GISTEMP surface temperature, whatever is selected here
+  $('planetVar').hidden = state.scope !== 'planet';
   $('regionNote').textContent = t('regionNote', { s: REGION_SIZE });
   const planet = state.scope === 'planet';
   $('modelControls').hidden = !planet;

@@ -177,10 +177,27 @@ export function seasonBreakdown(dict, opts = {}) {
 }
 
 // Two places, same variable: do they move the same way, and do the trends differ?
+// The test runs on the difference series (B minus A) over the years both cover, with the
+// same Theil-Sen slope and autocorrelation-corrected Mann-Kendall test as everything else.
+// Weather shared by the two places (an El Niño year, say) cancels in the difference, and
+// persistence from one year to the next is accounted for.
 export function comparePlaces(a, b) {
-  const d = slopeDifference(a.fit, b.fit);
+  const lo = Math.max(a.period[0], b.period[0]), hi = Math.min(a.period[1], b.period[1]);
+  const x = [], d = [];
+  for (let i = 0; i < a.years.length; i++) {
+    const y = a.years[i], j = b.years.indexOf(y);
+    if (y >= lo && y <= hi && j >= 0) { x.push(y); d.push(b.anomalies[j] - a.anomalies[i]); }
+  }
+  let pDiff = NaN, diffPerDecade = NaN;
+  if (x.length >= 8) {
+    const mk = mannKendall(x, d), sen = theilSen(x, d);
+    pDiff = mk.p; diffPerDecade = sen.slope * 10;
+  } else {
+    pDiff = slopeDifference(a.fit, b.fit).p; // too few common years: fall back to the slopes
+  }
   return {
-    perDecadeA: a.perDecade, perDecadeB: b.perDecade, pDiff: d.p, differ: d.p < a.alpha,
+    perDecadeA: a.perDecade, perDecadeB: b.perDecade, diffPerDecade, years: x.length,
+    pDiff, differ: pDiff < a.alpha && diffPerDecade !== 0,
     opposite: a.significant && b.significant && a.direction * b.direction < 0,
   };
 }

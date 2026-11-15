@@ -408,6 +408,7 @@ uniform float uF;           // W/m2, forcing during this step
 uniform vec4  uPhys;        // D, cos(lat) floor, C land, C mixed layer
 uniform vec2  uDeep;        // C deep, gamma
 uniform float uLam[32];     // feedback per latitude row
+uniform float uGam[32];     // surface-deep exchange per latitude row
 uniform float uT0[32];
 uniform float uTd0[32];
 uniform float uPi[32];
@@ -441,7 +442,7 @@ void main() {
   float lapZ = (surf(px + vec2(1.0, 0.0)) - 2.0 * t + surf(px - vec2(1.0, 0.0))) / (dlam * dlam * max(c * c, uPhys.y * uPhys.y));
   float lapM = (cp * (surf(px + vec2(0.0, 1.0)) - t) - cm * (t - surf(px - vec2(0.0, 1.0)))) / (dphi * dphi * c);
 
-  float ex = uDeep.y * (t - s.g);
+  float ex = uGam[j] * (t - s.g);
   float C = mix(uPhys.z, uPhys.w, o);
   float tNew = t + uDt / C * (uF - uLam[j] * t - o * ex + uPhys.x * (lapZ + lapM));
   float dNew = s.g + uDt / uDeep.x * ex;

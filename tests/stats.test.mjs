@@ -204,4 +204,22 @@ test('zonal blend: band centres, band edges and the poles', () => {
   assert.ok(zonalBlend(23, v) > 5 && zonalBlend(23, v) < 5.5 && zonalBlend(25, v) > 5.5); // continuous across the edge
 });
 
+test('comparing two places: shared weather cancels, so a real difference in trend is found', () => {
+  let seed = 21; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+  const years = [], A = [], B = [], C = [];
+  for (let y = 1981; y <= 2025; y++) {
+    const shared = 1.2 * rnd(); // an El Niño-like signal both places feel
+    years.push(y);
+    A.push(20 + 0.020 * (y - 1981) + shared + 0.08 * rnd());
+    B.push(25 + 0.035 * (y - 1981) + shared + 0.08 * rnd());
+    C.push(30 + 0.020 * (y - 1981) + shared + 0.08 * rnd());
+  }
+  const a = analyzeSeries(years, A), b = analyzeSeries(years, B), c = analyzeSeries(years, C);
+  const ab = comparePlaces(a, b), ac = comparePlaces(a, c);
+  assert.ok(ab.differ && ab.pDiff < 0.01, `different trends, p ${ab.pDiff}`);
+  near(ab.diffPerDecade, 0.15, 0.04);
+  assert.ok(!ac.differ, `same trend, p ${ac.pDiff}`);
+  assert.equal(ab.years, 45);
+});
+
 console.log(`\n${n} tests passed`);

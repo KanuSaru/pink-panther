@@ -4,6 +4,10 @@ Prototype for the NASA Space Apps Challenge 2026. A 3D globe where you pick an E
 
 The interface is in English by default and also in Spanish (EN / ES button, or `?lang=es` in the URL).
 
+**Live:** https://pink-panther-pi.vercel.app/
+
+**Best viewed in Firefox** on a laptop or desktop. That is the browser the team tested it in. It also runs in Chrome, Edge and Safari with WebGL 2.
+
 ## Who it is for
 
 Technical staff, teachers and researchers who need to know whether a change in a place is real before acting on it, teaching it or studying it further. The **Guided tour** button in the header walks through the tool in six steps, each one run on live NASA data: one place and its four answers, which variables are changing there, two places moving in opposite directions, the planet, its projection, and how to take the result away (report, CSV, link). Every result also carries a "What you can say" line: what the test supports stating, and what it does not.
@@ -49,13 +53,15 @@ Cd   dTd/dt = γ (T − Td)                                      deep ocean
 
 Nothing is tuned by eye. Everything else is diagnosed from the NASA GISTEMP record each time the app loads:
 
-1. **Present state**: each latitude band's fitted trend value today, relative to its 1880–1900 mean, turned into a smooth profile with a Legendre fit.
+1. **Present state**: each latitude band's level and warming rate today, from a straight line fitted to its last 30 years (relative to its 1880–1900 mean) and turned into a smooth profile with a Legendre fit. This does not depend on the period chosen in the interface: a line over a longer stretch of accelerating warming would put today well below what was observed.
 2. **Deep-ocean heat**: the deep-layer equation integrated with the observed surface record since 1880.
-3. **Feedback by latitude**: the value of `λ` each latitude needs for its energy budget to close today, given its observed warming rate. This is where polar amplification comes from: it is read from the data, not imposed.
+3. **Feedback by latitude**: the value of `λ` each latitude needs for its energy budget to close today, given its observed warming rate. This is where polar amplification comes from: it is read from the data, not imposed. It is limited to −4 to +4 W/m²/K. Where a latitude warms so slowly that it would need more than +4 (the Southern Ocean), the slow warming is treated as what it physically is, heat being taken up by the ocean, which is transient: that latitude gets a larger exchange `γ` with the deep ocean instead, up to 6 W/m²/K. Without this the Southern Ocean would barely warm for the rest of the century.
 4. **Global feedback**: set so the model's equilibrium warming for doubled CO₂ equals the climate sensitivity chosen in the interface (IPCC AR6: best estimate 3 °C, likely 2.5 to 4 °C). The chart's band is this likely range.
 5. **Present forcing**: whatever closes the global budget. The interface shows it next to the IPCC AR6 values as a check that the calibration is physically sensible.
 
 You choose the forcing reached in 2100 (the levels that name the SSP scenarios: 2.6, 4.5, 7.0, 8.5 W/m²) and the climate sensitivity. Forcing follows a straight line from today's diagnosed value to that level.
+
+Checked on the real GISTEMP record (`tests/ebm.test.mjs`): at 3 °C sensitivity the diagnosed present forcing is 3.1 W/m² and the energy imbalance 0.96 W/m², against IPCC AR6 values of 2.72 [1.96 to 3.48] W/m² (2019) and 0.79 [0.52 to 1.06] W/m² (2006–2018; the imbalance has risen since). The 4.5 W/m² level gives about +2.3 to +2.4 °C in 2100, a little below the AR6 central estimate of 2.7 °C for SSP2-4.5 (2081–2100), mainly because forcing here rises in a straight line instead of following the scenario.
 
 `src/ebm.js` is the same model on the CPU. It draws the chart curve, serves as the fallback on devices that cannot render to float textures (the globe then shows band means), and is what the tests exercise.
 
@@ -85,7 +91,7 @@ vercel --prod   # production
 
 ```bash
 vercel dev            # recommended: serves the page and the api/ functions
-npm test              # 21 tests of the statistics, 11 of the energy balance model
+npm test              # 22 tests of the statistics, 16 of the energy balance model, 5 shader guards
 ```
 
 Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. The app requests the saved copy `data/gistemp-zonal.csv` together with the live table and uses whichever answers first, so the planet view appears at once; if the live table arrives later and is newer, it replaces the copy. Run `npm run snapshot` after NASA publishes a new year to refresh the copy.
@@ -109,7 +115,8 @@ src/i18n.js                 English and Spanish text
 api/                        Vercel proxies (used only if the browser cannot reach NASA)
 assets/                     textures
 tests/stats.test.mjs        tests of the statistics
-tests/ebm.test.mjs          tests of the energy balance model
+tests/ebm.test.mjs          tests of the energy balance model, including performance budgets
+tests/shaders.test.mjs      static guards on the GLSL (loop bounds, texture reads, solver arrays)
 ```
 
 **Add a variable**: one entry in `VARIABLES` in `src/config.js` with the NASA POWER parameter code. **Add an example**: one entry in `EXAMPLES`.

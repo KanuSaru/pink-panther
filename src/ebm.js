@@ -27,7 +27,13 @@ export const EBM = {
   PI: [1880, 1900],        // reference period standing in for "pre-industrial"
   ECS_LIKELY: [2.5, 4.0],  // IPCC AR6 likely range of equilibrium climate sensitivity
   ECS_BEST: 3.0,
-  LAMBDA_RANGE: [-4.0, 6.0], // local feedback may be amplifying (negative) where ice and snow retreat
+  // Local feedback limits, W/m2/K. The lower limit lets the Arctic amplify as strongly as
+  // observed (ice and snow retreat, plus heat carried poleward that simple diffusion
+  // underestimates). Above +4 a row is warming slowly because the ocean is taking up its
+  // heat, which is transient: the excess goes to ocean uptake instead (see calibrate()).
+  LAMBDA_RANGE: [-4.0, 4.0],
+  GAMMA_MAX: 6.0,            // W/m2/K, cap on the local surface-deep exchange
+  RECENT: 30,                // years used to diagnose today's state and warming rate
   DEGREE: 5,                 // Legendre degree of the smooth latitude profiles
 };
 
@@ -144,14 +150,30 @@ export function equilibriumMean(g, lam, F) {
 }
 
 // Largest stable explicit time step (years), with a safety margin
-export function stableDt(g, lamMax) {
+export function stableDt(g, lamMax, gamMax = EBM.GAMMA) {
   let worst = 0;
   for (let j = 0; j < g.H; j++) {
     const zonal = 2 / (g.dlam * g.dlam * Math.max(g.c[j] * g.c[j], EBM.CAP * EBM.CAP));
     const merid = (g.cp[j] + g.cm[j]) / (g.dphi * g.dphi * g.c[j]);
-    worst = Math.max(worst, EBM.D * (zonal + merid) + lamMax + EBM.GAMMA);
+    worst = Math.max(worst, EBM.D * (zonal + merid) + Math.abs(lamMax) + gamMax);
   }
   return (0.8 * EBM.C_LAND) / worst;
+}
+
+// Today's level and warming rate of each band from the last `years` of the record,
+// independent of whatever period the user is analysing: a straight line over a long
+// period of accelerating warming would put today far below what was observed.
+export function recentState(years, bands, n = EBM.RECENT) {
+  const i0 = Math.max(0, years.length - n);
+  const x = years.slice(i0), last = years.at(-1);
+  const xm = x.reduce((s, v) => s + v, 0) / x.length;
+  return bands.map((b) => {
+    const y = b.slice(i0), ym = y.reduce((s, v) => s + v, 0) / y.length;
+    let sxy = 0, sxx = 0;
+    for (let i = 0; i < x.length; i++) { sxy += (x[i] - xm) * (y[i] - ym); sxx += (x[i] - xm) ** 2; }
+    const slope = sxy / sxx;
+    return { present: ym + slope * (last - xm), rate: slope };
+  });
 }
 
 // Diagnose the model's state and parameters from observations.
@@ -212,14 +234,23 @@ export function calibrate({ obs, ocean, W, H, ecs = EBM.ECS_BEST }) {
     lamG = hi; // the stable side of the bracket
   }
   let { F0, lam } = profile(lamG);
+  // Where a row needs a feedback above the upper limit (it warms more slowly than its
+  // budget allows, as the Southern Ocean does), the slow warming is ocean heat uptake,
+  // which is transient: give the excess to the surface-deep exchange of that row.
+  const gam = new Float64Array(H).fill(EBM.GAMMA);
+  for (let j = 0; j < H; j++) {
+    const need = (F0 - storage[j] - uptake[j] + diff[j]) - lam[j] * T0[j]; // W/m2 left over
+    const lever = oRow[j] * (T0[j] - Td0[j]);
+    if (need > 0 && lever > 0.05) gam[j] = Math.min(EBM.GAMMA_MAX, EBM.GAMMA + need / lever);
+  }
   let ok = [F0, N0, meanT0, ...lam, ...T0, ...Td0].every(Number.isFinite) && meanT0 > 0.1;
   if (!ok) { // observations unusable: fall back to a uniform feedback and a state of rest
-    lam = new Float64Array(H).fill(EBM.F2X / ecs); F0 = 0; T0.fill(0); Td0.fill(0);
+    lam = new Float64Array(H).fill(EBM.F2X / ecs); F0 = 0; T0.fill(0); Td0.fill(0); gam.fill(EBM.GAMMA);
   }
   const lamMax = Math.max(...lam);
   return {
-    g, ok, ecs, t0: yN, y0, pi, piRows: bandsToRows(pi, g), T0, Td0, lam, lamG, F0, N0, meanT0,
-    ecsModel: equilibriumMean(g, lam, EBM.F2X), dt: stableDt(g, lamMax),
+    g, ok, ecs, t0: yN, y0, pi, piRows: bandsToRows(pi, g), T0, Td0, lam, gam, lamG, F0, N0, meanT0,
+    ecsModel: equilibriumMean(g, lam, EBM.F2X), dt: stableDt(g, Math.max(...lam.map(Math.abs)), Math.max(...gam)),
   };
 }
 
@@ -246,6 +277,7 @@ export class Model {
   // n explicit Euler steps of size dt under a constant forcing F
   step(n, dt, F) {
     const { W, H, dphi, dlam, c, cp, cm } = this.g, lam = this.cal.lam, o = this.ocean;
+    const gam = this.cal.gam || new Float64Array(H).fill(EBM.GAMMA);
     for (let s = 0; s < n; s++) {
       const T = this.T, Td = this.Td, out = this.next;
       for (let j = 0; j < H; j++) {
@@ -256,7 +288,7 @@ export class Model {
           const k = row + i, t = T[k];
           const e = T[row + (i + 1) % W], w = T[row + (i + W - 1) % W];
           const lap = (e - 2 * t + w) * zk + (cp[j] * (T[jn + i] - t) - cm[j] * (t - T[js + i])) * mk;
-          const ex = EBM.GAMMA * (t - Td[k]);
+          const ex = gam[j] * (t - Td[k]);
           const C = EBM.C_LAND + (EBM.C_MIX - EBM.C_LAND) * o[k];
           out[k] = t + (dt / C) * (F - lam[j] * t - o[k] * ex + EBM.D * lap);
           Td[k] += (dt / EBM.C_DEEP) * ex;
