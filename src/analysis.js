@@ -36,6 +36,18 @@ export function seriesFromPower(dict, season = 'ANN', fill = -999) {
 export const BAND_COLUMNS = ['90S-64S', '64S-44S', '44S-24S', '24S-EQU', 'EQU-24N', '24N-44N', '44N-64N', '64N-90N'];
 export const BAND_EDGES = [-90, -64, -44, -24, 0, 24, 44, 64, 90];
 
+// Value at a latitude from the eight band values, blended across band edges over
+// `soft` degrees. The same blend the globe's shader draws (zonal() in shaders.js).
+export function zonalBlend(lat, values, soft = 2) {
+  const step = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  let out = 0;
+  for (let i = 0; i < 8; i++) {
+    const a = i === 0 ? -200 : BAND_EDGES[i], b = i === 7 ? 200 : BAND_EDGES[i + 1];
+    out += (step(a - soft, a + soft, lat) - step(b - soft, b + soft, lat)) * values[i];
+  }
+  return out;
+}
+
 export function parseGistempZonal(csv) {
   const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const h = lines.findIndex((l) => /^Year\s*,/i.test(l));

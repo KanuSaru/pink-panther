@@ -30,6 +30,8 @@ Six one-click examples (Barranquilla, Svalbard, the Sahel, the Amazon, the Aral 
 - **Temperature**: a surface temperature field shifted by each band's change, in the palette of the NASA image.
 - **Satellite**: the monthly NASA GIBS image of the selected variable.
 
+In the Anomaly and Temperature views, moving the mouse over the globe shows the value under the cursor (kelvin and °C, or the anomaly), and the legend gives the same value for the selected point. It is computed in the browser from the data already loaded, with the arithmetic the shader uses and without the visual exaggeration. The map's base field was decoded from an image and can be several degrees off (it reads warm over deserts and cool over rainforest), so for the selected point the legend puts the NASA POWER surface temperature first.
+
 In the data views the globe carries a latitude-longitude grid, and model fields are drawn with isotherms on the colour-class boundaries.
 
 ## The prediction engine
@@ -83,7 +85,7 @@ vercel --prod   # production
 
 ```bash
 vercel dev            # recommended: serves the page and the api/ functions
-npm test              # 20 tests of the statistics, 11 of the energy balance model
+npm test              # 21 tests of the statistics, 11 of the energy balance model
 ```
 
 Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. For a demo on an unreliable connection, `npm run snapshot` saves a copy to `data/gistemp-zonal.csv`, which the app uses as a last resort.

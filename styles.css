@@ -236,6 +236,14 @@ summary { cursor: pointer; padding: 9px 0; font-weight: 550; font-size: 0.9rem; 
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 16px 0 12px; }
 
+/* ---------- value under the cursor ---------- */
+.probe {
+  position: fixed; z-index: 2; pointer-events: none;
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 5px 9px; font-size: 0.84rem; white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
 /* ---------- guided tour ---------- */
 .tour {
   position: fixed; z-index: 3;
