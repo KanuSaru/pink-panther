@@ -109,7 +109,7 @@ uniform float uPx;           // world units per pixel at distance 1
 uniform float uAtmoMix;      // atmosphere tint on the surface (natural view)
 uniform sampler2D uSim;      // energy balance model state: R = T, G = deep ocean, B = baseline offset
 uniform vec2  uSimRes;
-uniform float uSimOn;        // 1 when the displayed year is a model projection
+uniform float uSimOn;        // 0 observed bands, 1 model field; in between while cross-fading
 uniform float uGrid;         // graticule strength in the data views
 
 varying vec2 vUv;
@@ -153,14 +153,30 @@ vec3 simTap(vec2 ij) {
   return texture2D(uSim, uv).rgb;
 }
 
+// Cubic B-spline weights for the four nearest samples
+vec4 bspline(float f) {
+  float f2 = f * f;
+  float f3 = f2 * f;
+  return vec4(1.0 - 3.0 * f + 3.0 * f2 - f3, 4.0 - 6.0 * f2 + 3.0 * f3, 1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3, f3) / 6.0;
+}
+
+// The model field through a bicubic B-spline over 4 x 4 cells. Two-cell interpolation
+// leaves a crease along every cell border, which the colour scale turns into a visible
+// staircase; the spline is smooth in value, slope and curvature.
 float simValue(vec2 uv) {
   vec2 p = uv * uSimRes - 0.5;
   vec2 i = floor(p);
   vec2 f = p - i;
-  f = f * f * (3.0 - 2.0 * f);
-  vec3 s = mix(mix(simTap(i), simTap(i + vec2(1.0, 0.0)), f.x),
-               mix(simTap(i + vec2(0.0, 1.0)), simTap(i + vec2(1.0, 1.0)), f.x), f.y);
-  return s.r + s.b;
+  vec4 wx = bspline(f.x);
+  vec4 wy = bspline(f.y);
+  float s = 0.0;
+  for (int b = 0; b < 4; b++) {
+    for (int a = 0; a < 4; a++) {
+      vec3 t = simTap(i + vec2(float(a) - 1.0, float(b) - 1.0));
+      s += wx[a] * wy[b] * (t.r + t.b);
+    }
+  }
+  return s;
 }
 
 // 1 on the boundary between two colour classes of the diverging scale: an isotherm
@@ -242,18 +258,16 @@ void main() {
     if (uMode < 1.5) {
       float v; float r;
       zonal(lat, v, r);
-      if (uSimOn > 0.5) {
-        v = simValue(vUv);
-        data = divA(v / uRange);
-        data = mix(data, data * 0.55, classEdge(v / uRange) * uStepped * 0.8);
-      } else {
-        data = divA(v / uRange);
-      }
+      // observed bands and the model field cross-fade when the timeline passes the last record
+      if (uSimOn > 0.002) v = mix(v, simValue(vUv), uSimOn);
+      data = divA(v / uRange);
+      // isotherms only with classed colours, where they mark the class boundaries of the model field
+      data = mix(data, data * 0.55, classEdge(v / uRange) * uStepped * uSimOn * 0.8);
       a = uOverlay;
     } else if (uMode < 2.5) {
       float v; float r;
       zonal(lat, v, r);
-      if (uSimOn > 0.5) v = simValue(vUv);
+      if (uSimOn > 0.002) v = mix(v, simValue(vUv), uSimOn);
       float k = texture2D(uTempBase, vUv).r;
       float t = clamp(k + (v - r) * uExag / 128.0, 0.0, 1.0);
       data = texture2D(uPalette, vec2(t * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb;
@@ -270,7 +284,7 @@ void main() {
     float ly = 1.0 - smoothstep(0.6, 1.5, abs(fract(gy - 0.5) - 0.5) / max(fwidth(gy), 1e-5));
     float lx = (1.0 - smoothstep(0.6, 1.5, abs(fract(gx - 0.5) - 0.5) / clamp(fwidth(gx), 1e-5, 0.5))) * smoothstep(0.08, 0.3, cos(radians(lat)));
     float eq = 1.0 - smoothstep(0.6, 1.5, abs(lat) / max(fwidth(lat), 1e-5));
-    col = mix(col, vec3(0.0), clamp(max(ly, lx) * 0.22 + eq * 0.2, 0.0, 0.4) * uGrid);
+    col = mix(col, vec3(0.0), clamp(max(ly, lx) * 0.14 + eq * 0.12, 0.0, 0.26) * uGrid);
     col = mix(col, vec3(0.03), coast * 0.6);
     col *= 0.84 + 0.16 * clamp(dot(N, V), 0.0, 1.0);
   }
@@ -360,11 +374,11 @@ export function earthUniformDefaults() {
     uRelief: 0.7,
     uBands: new Float32Array(8),
     uBandsRef: new Float32Array(8),
-    uBandSoft: 2.0,
+    uBandSoft: 10.0, // same value as BAND_SOFT in analysis.js
     uRange: 3,
     uDiv: new Float32Array(33),
     uDivR: new Float32Array(33),
-    uStepped: 1,
+    uStepped: 0,
     uOverlay: 0.92,
     uExag: 1,
     uSatOn: 0,

@@ -36,7 +36,9 @@ Six one-click examples (Barranquilla, Svalbard, the Sahel, the Amazon, the Aral 
 
 In the Anomaly and Temperature views, moving the mouse over the globe shows the value under the cursor (kelvin and °C, or the anomaly), and the legend gives the same value for the selected point. It is computed in the browser from the data already loaded, with the arithmetic the shader uses and without the visual exaggeration. The base field of the Temperature view comes from the same source as the point analysis (NASA POWER), so the colour, the value under the cursor and the series of a point agree; the map is coarser than a point request, so expect a degree or two of difference near coasts and mountains. For the selected point the legend gives the mean of its NASA POWER series over 2001–2025 first, then the map value.
 
-In the data views the globe carries a latitude-longitude grid, and model fields are drawn with isotherms on the colour-class boundaries.
+In the data views the globe carries a faint latitude-longitude grid. Colours are continuous by default: the eight observed bands are blended over 10° on each side of a band edge, so the profile is smooth from pole to pole and still equals each band's value at the band's centre, and the model field is sampled through a bicubic spline. Band values and the switch from observations to the model ease over a fraction of a second, so playing the timeline does not flicker. "Classed colors" brings back eleven flat classes with isotherms on their boundaries.
+
+The Arctic band leads by a wide margin in both the record and the projection. That is Arctic amplification, a measured phenomenon (Rantanen et al., 2022, found the Arctic warming nearly four times faster than the globe since 1979), and the note under the band table says so with the ratio computed from the data on screen.
 
 ## The prediction engine
 
@@ -91,7 +93,7 @@ vercel --prod   # production
 
 ```bash
 vercel dev            # recommended: serves the page and the api/ functions
-npm test              # 22 tests of the statistics, 16 of the energy balance model, 5 shader guards
+npm test              # 22 tests of the statistics, 16 of the energy balance model, 8 shader and display guards
 ```
 
 Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. The app requests the saved copy `data/gistemp-zonal.csv` together with the live table and uses whichever answers first, so the planet view appears at once; if the live table arrives later and is newer, it replaces the copy. Run `npm run snapshot` after NASA publishes a new year to refresh the copy.

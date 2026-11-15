@@ -38,7 +38,11 @@ export const BAND_EDGES = [-90, -64, -44, -24, 0, 24, 44, 64, 90];
 
 // Value at a latitude from the eight band values, blended across band edges over
 // `soft` degrees. The same blend the globe's shader draws (zonal() in shaders.js).
-export function zonalBlend(lat, values, soft = 2) {
+// Half-width, in degrees, of the blend between neighbouring bands. With 10 the profile
+// is smooth from pole to pole and still equals each band's value at the band's centre.
+export const BAND_SOFT = 10;
+
+export function zonalBlend(lat, values, soft = BAND_SOFT) {
   const step = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
   let out = 0;
   for (let i = 0; i < 8; i++) {

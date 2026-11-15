@@ -961,6 +961,11 @@ function bandLabel(k) {
 }
 
 function renderBands() {
+  // The Arctic leading by a wide margin is real: say so, with the ratio from the data on screen
+  const arctic = state.bands[7], world = state.planet;
+  const ratio = arctic && world && world.perDecade > 0 ? arctic.perDecade / world.perDecade : 0;
+  $('bandsNote').hidden = !(ratio > 1.5 && arctic.significant && world.significant);
+  if (!$('bandsNote').hidden) $('bandsNote').textContent = t('bandsNote', { x: num(ratio, 1), a: state.planet.period[0], b: state.planet.period[1] });
   const max = Math.max(...state.bands.map((b) => Math.abs(b.perDecade)));
   const rows = state.bands.map((b, k) => ({ b, k })).reverse(); // north at the top, like the map
   $('bands').replaceChildren(...rows.map(({ b, k }) => {

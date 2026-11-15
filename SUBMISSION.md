@@ -34,7 +34,7 @@ https://pink-panther-pi.vercel.app/
 
 **Benefits.** A municipal technician gets a defensible statement with method and limits for a brief (downloadable report). A researcher gets the annual series and the exact NASA request to repeat the analysis (CSV). A teacher gets a link that reopens the same analysis on any device, and a six-step guided tour for class. The interface is in English and Spanish.
 
-**How it is built.** Static web app, no build step: vanilla JavaScript modules, three.js with custom GLSL shaders (surface, atmospheric scattering, and the model solver), statistics written from scratch and covered by 43 automated tests, and three small Vercel functions used as fallbacks when a browser cannot reach NASA directly. Hosted on Vercel.
+**How it is built.** Static web app, no build step: vanilla JavaScript modules, three.js with custom GLSL shaders (surface, atmospheric scattering, and the model solver), statistics written from scratch and covered by 46 automated tests, and three small Vercel functions used as fallbacks when a browser cannot reach NASA directly. Hosted on Vercel.
 
 **Goals.** Make the question "is this change real?" answerable in one click by people who are not statisticians, without hiding the uncertainty.
 
@@ -83,6 +83,7 @@ No NASA logos, insignia or mission identifiers are used anywhere in the project.
 - IPCC AR6 WG1 (2021), Summary for Policymakers and chapter 7: equilibrium climate sensitivity (best estimate 3 °C, likely 2.5 to 4 °C), forcing of doubled CO2 (3.93 W/m²), and the reference values shown next to the model's diagnosed forcing and energy imbalance.
 - Geoffroy, O. et al. (2013), J. Climate 26: two-layer energy balance model and its CMIP5 multi-model parameters.
 - North, G. R. (1975), J. Atmos. Sci. 32, and North, G. R. and Kim, K.-Y. (2017), Energy Balance Climate Models: diffusive energy balance models on the sphere.
+- Rantanen, M. et al. (2022), Communications Earth & Environment 3, 168: Arctic amplification, cited in the note under the latitude-band table.
 - Mann, H. B. (1945) and Kendall, M. G. (1975): Mann-Kendall trend test.
 - Sen, P. K. (1968): Theil-Sen slope and its confidence interval.
 - Pettitt, A. N. (1979), Applied Statistics 28: change-point test used to tell a step from a gradual change.
