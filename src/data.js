@@ -133,14 +133,30 @@ export async function fetchRegion({ box, parameter, start, onProgress }) {
   }
 }
 
-export async function fetchGistemp() {
+// The saved copy and the live table are requested together and the first valid answer is
+// used, so the planet view never waits on NASA GISS. If the live table arrives later and
+// differs from the copy, `onFresh` receives it. GISS sends no CORS headers, so the live
+// table can only be read through the proxy.
+export async function fetchGistemp(onFresh) {
   if (cache.has('gistemp')) return cache.get('gistemp');
-  // GISS does not send CORS headers, so the proxy goes first here.
-  const { body, url } = await firstOf(['/api/gistemp', GISTEMP_ZONAL, './data/gistemp-zonal.csv'], { as: 'text', timeout: 30000 });
-  if (!/Year\s*,/i.test(body)) throw new Error('GISTEMP: unexpected response');
-  const out = { csv: body, url: GISTEMP_ZONAL, snapshot: url.startsWith('./data'), fetchedAt: new Date() };
-  cache.set('gistemp', out);
-  return out;
+  const read = async (url, snapshot, timeout) => {
+    const body = await request(url, { as: 'text', timeout });
+    if (!/Year\s*,/i.test(body)) throw new Error('GISTEMP: unexpected response');
+    return { csv: body, url: GISTEMP_ZONAL, snapshot, fetchedAt: new Date() };
+  };
+  const live = read('/api/gistemp', false, 30000);
+  const saved = read('./data/gistemp-zonal.csv', true, 15000);
+  let first;
+  try { first = await Promise.any([live, saved]); }
+  catch (e) { throw e.errors?.find((x) => x.status && x.status !== 404) || e.errors?.[0] || e; }
+  cache.set('gistemp', first);
+  if (first.snapshot) {
+    live.then((fresh) => {
+      cache.set('gistemp', fresh);
+      if (fresh.csv.trim() !== first.csv.trim()) onFresh?.(fresh);
+    }).catch(() => { /* the saved copy stays */ });
+  }
+  return first;
 }
 
 // Global image of one GIBS layer for one month, in the same projection as the globe textures.

@@ -7,10 +7,11 @@
   "scripts": {
     "dev": "vercel dev",
     "test": "node tests/stats.test.mjs && node tests/ebm.test.mjs",
-    "snapshot": "node scripts/snapshot-gistemp.mjs"
+    "snapshot": "node scripts/snapshot-gistemp.mjs",
+    "temp-base": "node scripts/build-temp-base.mjs"
   },
   "engines": {
     "node": ">=18"
   },
-  "siDisclosure": "Code and the derived data file assets/temp_base.png were generated with Claude (Anthropic), a large language model, directed by the team. No SI-generated images, audio or video."
+  "siDisclosure": "Code, including the script that builds assets/temp_base.png from NASA POWER, was generated with Claude (Anthropic), a large language model, directed by the team. No SI-generated images, audio or video."
 }

@@ -1,7 +1,7 @@
 // SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team.
 // Application state and interface wiring.
 import { createGlobe } from './globe.js';
-import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POWER_FIRST_YEAR, GIBS_FIRST_YEAR, HORIZON_MAX, REGION_SIZE, SOURCES, CREDITS } from './config.js';
+import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POWER_FIRST_YEAR, GIBS_FIRST_YEAR, HORIZON_MAX, TEMP_BASE_PERIOD, REGION_SIZE, SOURCES, CREDITS } from './config.js';
 import { fetchPoint, fetchPointAll, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
 import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES, zonalBlend, screenVariables, seasonBreakdown, comparePlaces } from './analysis.js';
 import { mean } from './stats.js';
@@ -76,6 +76,7 @@ function init() {
   Promise.allSettled([
     globe.setImage('uDay', './assets/earth_day.jpg', { repeatX: true }),
     globe.setImage('uClouds', './assets/earth_clouds.jpg', { repeatX: true }),
+    globe.setImage('uNight', './assets/earth_night.jpg', { repeatX: true }),
     globe.setImage('uNormal', './assets/earth_normal.jpg'),
     globe.setImage('uSpec', './assets/earth_specular.jpg'),
     globe.setImage('uTempBase', './assets/temp_base.png', { mipmaps: false }),
@@ -393,8 +394,8 @@ function loadTempBase() {
 }
 
 // What the data views show at one place, as numbers. The same arithmetic as the shader,
-// without the visual exaggeration: base field (0..1 = 192..320 K) plus the change of the
-// latitude band since the reference decade.
+// without the visual exaggeration: the NASA POWER climatology (0..1 = 192..320 K) plus the
+// change of the latitude band since the years of that climatology.
 function estimateAt(lat, lon) {
   if (!state.bandNow || !state.bandsRef) return null;
   const anomaly = zonalBlend(lat, state.bandNow);
@@ -488,11 +489,10 @@ function recomputeModel() {
 async function loadPlanet() {
   state.busy = 'loadingGistemp';
   renderFindings();
+  const use = (g) => { state.gistemp = parseGistempZonal(g.csv); state.gistempMeta = g; state.gistempError = null; };
   try {
-    const g = await fetchGistemp();
-    state.gistemp = parseGistempZonal(g.csv);
-    state.gistempMeta = g;
-    state.gistempError = null;
+    // a newer table from NASA replaces the saved copy when it arrives
+    use(await fetchGistemp((fresh) => { use(fresh); recompute(); }));
   } catch (e) {
     state.gistempError = e.message || String(e);
   }
@@ -599,7 +599,9 @@ function recompute() {
     const opts = { period, baseline: [1951, 1980], alpha: state.alpha };
     state.planet = analyzeSeries(g.years, g.global, opts);
     state.bands = g.bands.map((b) => analyzeSeries(g.years, b, opts));
-    state.bandsRef = g.bands.map((b) => mean(b.slice(-10)));
+    // the base field of the Temperature view is the mean of these years, so changes are counted from them
+    const inBase = g.years.map((y) => y >= TEMP_BASE_PERIOD[0] && y <= TEMP_BASE_PERIOD[1]);
+    state.bandsRef = g.bands.map((b) => mean(b.filter((_, i) => inBase[i])));
   }
   if (state.pointRaw) {
     const s = seriesFromPower(state.pointRaw.dict, state.season, state.pointRaw.fill);
@@ -1068,13 +1070,13 @@ function renderLegend() {
   }
   if (state.point) {
     const text = estimateText(state.point.lat, state.point.lon);
-    // the map's field is decoded from an image; where NASA POWER has the surface temperature of this point, give that first
+    // the map is a coarse climatology; where NASA POWER has the series of this point, give its mean over the same years first
     const ts = state.view === 'temperature' && state.allRaw?.key === `${state.point.lat},${state.point.lon}` && state.allRaw.dicts.TS;
     let measured = '';
     if (ts) {
       const s = seriesFromPower(ts, 'ANN', state.allRaw.fill);
-      const ref = s.values.filter((_, i) => s.years[i] >= 1991 && s.years[i] <= 2020);
-      if (ref.length >= 10) measured = `${t('probePower', { k: num(mean(ref) + 273.15, 0), c: num(mean(ref), 0) })} `;
+      const ref = s.values.filter((_, i) => s.years[i] >= TEMP_BASE_PERIOD[0] && s.years[i] <= TEMP_BASE_PERIOD[1]);
+      if (ref.length >= 10) measured = `${t('probePower', { k: num(mean(ref) + 273.15, 0), c: num(mean(ref), 0), a: TEMP_BASE_PERIOD[0], b: TEMP_BASE_PERIOD[1] })} `;
     }
     if (text) row(`${t('legendPoint', { x: placeLabel(state.point) })}: ${measured}${measured ? t('probeMap', { x: text }) : text}`);
   }

@@ -25,12 +25,12 @@ Six one-click examples (Barranquilla, Svalbard, the Sahel, the Amazon, the Aral 
 
 ### Globe views
 
-- **Natural**: day map, relief, ocean glint, clouds and atmosphere.
+- **Natural**: day map, relief, ocean glint, clouds with their shadows, city lights along the night edge, and atmosphere.
 - **Anomaly**: temperature difference from 1951–1980 in eight latitude bands (NASA GISTEMP) for the year on the timeline.
-- **Temperature**: a surface temperature field shifted by each band's change, in the palette of the NASA image.
+- **Temperature**: the mean surface temperature of 2001–2025 (NASA POWER climatology, MERRA-2) shifted by each band's change since those years, in a NASA thermal palette.
 - **Satellite**: the monthly NASA GIBS image of the selected variable.
 
-In the Anomaly and Temperature views, moving the mouse over the globe shows the value under the cursor (kelvin and °C, or the anomaly), and the legend gives the same value for the selected point. It is computed in the browser from the data already loaded, with the arithmetic the shader uses and without the visual exaggeration. The map's base field was decoded from an image and can be several degrees off (it reads warm over deserts and cool over rainforest), so for the selected point the legend puts the NASA POWER surface temperature first.
+In the Anomaly and Temperature views, moving the mouse over the globe shows the value under the cursor (kelvin and °C, or the anomaly), and the legend gives the same value for the selected point. It is computed in the browser from the data already loaded, with the arithmetic the shader uses and without the visual exaggeration. The base field of the Temperature view comes from the same source as the point analysis (NASA POWER), so the colour, the value under the cursor and the series of a point agree; the map is coarser than a point request, so expect a degree or two of difference near coasts and mountains. For the selected point the legend gives the mean of its NASA POWER series over 2001–2025 first, then the map value.
 
 In the data views the globe carries a latitude-longitude grid, and model fields are drawn with isotherms on the colour-class boundaries.
 
@@ -88,7 +88,7 @@ vercel dev            # recommended: serves the page and the api/ functions
 npm test              # 21 tests of the statistics, 11 of the energy balance model
 ```
 
-Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. For a demo on an unreliable connection, `npm run snapshot` saves a copy to `data/gistemp-zonal.csv`, which the app uses as a last resort.
+Any static server (`python3 -m http.server`) runs the point and region analysis but not the planet view: NASA GISS sends no CORS headers, so that table is read through `api/gistemp`. The app requests the saved copy `data/gistemp-zonal.csv` together with the live table and uses whichever answers first, so the planet view appears at once; if the live table arrives later and is newer, it replaces the copy. Run `npm run snapshot` after NASA publishes a new year to refresh the copy.
 
 ## Structure
 
@@ -114,7 +114,7 @@ tests/ebm.test.mjs          tests of the energy balance model
 
 **Add a variable**: one entry in `VARIABLES` in `src/config.js` with the NASA POWER parameter code. **Add an example**: one entry in `EXAMPLES`.
 
-**Full-resolution textures**: the day map and the cloud map arrived reduced to 2576 px. Replace `assets/earth_day.jpg` and `assets/earth_clouds.jpg` with the 8k originals (or 4k, kinder to phones) under the same names.
+**Textures**: the day and cloud maps are 4096 px wide, the largest size every phone accepts. **Base temperature field**: `npm run temp-base` rebuilds `assets/temp_base.png` from the NASA POWER climatology (648 small requests, a few minutes; the service may answer 429 for a while afterwards, so do not run it right before a demo).
 
 ## Method
 
@@ -139,12 +139,12 @@ What the model tests check (`tests/ebm.test.mjs`, with synthetic observations sh
 - The energy balance model has one surface layer and one deep-ocean layer. It has no winds, clouds, currents or ice; the diagnosed feedback profile absorbs what its simple diffusion cannot represent, and is assumed to stay fixed. The straight-line forcing is an idealized pathway, not the SSP time series. Treat its output as a physically grounded illustration, not as a substitute for CMIP models.
 - The model starts from zonally uniform anomalies, because zonal means are what the GISTEMP table provides. Land-ocean contrast develops during the first model years.
 - The anomaly view only resolves latitude bands; real spatial detail is in the region analysis.
-- The base field of the "Temperature" view was decoded from the colours of a NASA image; its values are approximate and meant for viewing, not measuring.
+- The "Temperature" view adds the change of a whole latitude band to a 2001–2025 climatology stored in steps of 0.5 K at half a degree. It shows where it is warm or cold and how the band has moved; the series of a point is the measurement.
 - MERRA-2 cells are about 50 km wide: it does not resolve microclimates.
 
 ## Use of SI
 
-The code of this application and the derived data file `assets/temp_base.png` were generated with Claude (Anthropic), a large language model, directed by the team. There are no SI-generated images, audio or video. Every source file says so on its first line, as do `package.json`, the `<meta name="generator">` tag and the "About" dialog.
+The code of this application, including the script that builds the data file `assets/temp_base.png` from NASA POWER, was generated with Claude (Anthropic), a large language model, directed by the team. There are no SI-generated images, audio or video. Every source file says so on its first line, as do `package.json`, the `<meta name="generator">` tag and the "About" dialog.
 
 ## Data and credits
 
