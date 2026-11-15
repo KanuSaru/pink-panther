@@ -151,7 +151,9 @@ What the model tests check (`tests/ebm.test.mjs`, with synthetic observations sh
 
 ## Use of SI
 
-The code of this application, including the script that builds the data file `assets/temp_base.png` from NASA POWER, was generated with Claude (Anthropic), a large language model, directed by the team. There are no SI-generated images, audio or video. Every source file says so on its first line, as do `package.json`, the `<meta name="generator">` tag and the "About" dialog.
+The code of this application, including the script that builds the data file `assets/temp_base.png` from NASA POWER, was generated with Claude (Anthropic), a large language model, directed by the team. The app contains no SI-generated images, audio or video. Every source file says so on its first line, as do `package.json`, the `<meta name="generator">` tag and the "About" dialog.
+
+The narration of the demo video was generated with ElevenLabs (AI voice) from a script the team approved; the video says so on screen, in its description and in its metadata.
 
 ## Data and credits
 
