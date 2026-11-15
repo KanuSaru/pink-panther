@@ -36,7 +36,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     new THREE.SphereGeometry(ATMO_SCALE, 96, 48),
     new THREE.ShaderMaterial({
       uniforms: atmoUniforms, vertexShader: ATMO_VERT, fragmentShader: ATMO_FRAG,
-      side: THREE.BackSide, transparent: true, depthWrite: false,
+      side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     }),
   );
   scene.add(atmo);
@@ -223,6 +223,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
 
   // ---- frame loop ----
   const right = new THREE.Vector3(), up = new THREE.Vector3(), sun = new THREE.Vector3(), tmp = new THREE.Vector3();
+  let sunSide = 0.8;
   const t0 = performance.now();
   function frame(now) {
     if (fly) {
@@ -238,9 +239,12 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     controls.rotateSpeed = Math.min(1, (camera.position.length() - 1) * 0.45);
     controls.update();
 
-    // the sun stays over the viewer's shoulder so the visible side is always lit
+    // The sun stays over the viewer's shoulder so the visible side is always lit. In the
+    // natural view it sits further to the side, so night shows along one edge of the globe.
     camera.matrixWorld.extractBasis(right, up, tmp);
-    sun.copy(camera.position).normalize().addScaledVector(right, 0.8).addScaledVector(up, 0.35).normalize();
+    const side = uniforms.uMode.value < 0.5 ? 1.5 : 0.8;
+    sunSide = reduceMotion ? side : sunSide + (side - sunSide) * 0.06;
+    sun.copy(camera.position).normalize().addScaledVector(right, sunSide).addScaledVector(up, 0.35).normalize();
     uniforms.uSunDir.value = [sun.x, sun.y, sun.z];
     atmoUniforms.uSunDir.value = uniforms.uSunDir.value;
     uniforms.uTime.value = reduceMotion ? 0 : (now - t0) / 1000;

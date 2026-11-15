@@ -26,7 +26,6 @@ No NASA logos, insignia or mission identifiers are used anywhere in the project.
 | Resource | Use | License |
 |---|---|---|
 | three.js r170 (with OrbitControls), loaded from jsDelivr | 3D rendering | MIT |
-| three.js example `webgpu_tsl_earth` | The atmosphere shader is a GLSL port of this example's technique and constants | MIT |
 | VisualPDE (visualpde.com; Walker, Townsend, Chudasama and Krause, 2023) | Method of the prediction engine: a PDE advanced by explicit time steps in a fragment shader between two alternating float textures. The idea was followed; no code was copied | Open source site; paper in Bull. Math. Biol. 85:113 |
 | ColorBrewer palettes (RdBu, BrBG, PuOr) by Cynthia Brewer | Diverging colour scales | Apache 2.0 |
 | Instrument Sans, from Google Fonts | Typeface | SIL Open Font License 1.1 |
@@ -60,15 +59,15 @@ No NASA logos, insignia or mission identifiers are used anywhere in the project.
 
 3. **NASA Global Imagery Browse Services (GIBS)**: WMS endpoint `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi`. Layers: `MERRA2_2m_Air_Temperature_Monthly`, `MERRA2_Precipitation_Bias_Corrected_Monthly`, `MERRA2_Surface_Wind_Speed_Monthly`, `MERRA2_Soil_Water_Root_Zone_Monthly`, `MERRA2_Surface_Skin_Temperature_Monthly`. Each is wrapped on the globe for the month and year chosen on the timeline. Acknowledgement: we acknowledge the use of imagery provided by services from NASA's Global Imagery Browse Services (GIBS), part of NASA's Earth Science Data and Information System (ESDIS).
 
-4. **NASA global surface temperature image** (supplied by the team): its colour legend (192–320 K) was inverted pixel by pixel to obtain an approximate temperature field, used as the base of the "Temperature" view together with the same palette.
+4. **NASA POWER climatology** (`https://power.larc.nasa.gov/api/temporal/climatology/regional`, parameter `TS`, MERRA-2, annual mean of 2001–2025, accessed 2026-11-15): the base field of the "Temperature" view, stored as `assets/temp_base.png` by `scripts/build-temp-base.mjs`. The palette of that view (192–320 K) is the colour legend of a NASA global surface temperature image supplied by the team.
 
-5. **NASA Blue Marble imagery**, through the Solar System Scope textures (**confirm**), for the natural view of the globe.
+5. **NASA Blue Marble and Black Marble imagery**, through the Solar System Scope textures (CC BY 4.0) as distributed with the three.js r170 examples (**confirm**), for the natural view of the globe: day map, city lights and clouds.
 
 ## 3. Use of SI tools
 
 Yes. We used Claude (Anthropic), a large language model, as a programming assistant.
 
-- **What it did**: wrote the application code (three.js scene and GLSL shaders, the energy balance model and its GPU solver, data access, statistics, chart, interface, Vercel functions, tests), wrote the script that converted the textures and decoded the NASA temperature image into `assets/temp_base.png`, and drafted the documentation.
+- **What it did**: wrote the application code (three.js scene and GLSL shaders, the energy balance model and its GPU solver, data access, statistics, chart, interface, Vercel functions, tests), wrote the scripts that converted the textures and built `assets/temp_base.png` from the NASA POWER climatology, and drafted the documentation.
 - **What it also proposed**: within the team's proposal (which already named NASA POWER and temperature as the first variable), it suggested the two additional NASA sources (GISTEMP and GIBS), the specific statistical tests, and the formulation of the energy balance model used for the planet projection.
 - **What came from the team**: the idea, the choice of challenge, the project proposal and its objectives, the first data source and variable, and the image resources. No images, audio or video were generated with SI.
 - **How it is indicated**: every source file starts with an SI disclosure comment; `package.json` has an `siDisclosure` field; `index.html` carries a `<meta name="generator">` tag; the two derived PNG files carry the disclosure in their embedded metadata; the "About" dialog in the app and the README state it in text.

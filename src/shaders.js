@@ -2,15 +2,64 @@
 // GLSL for the globe. Written against three.js ShaderMaterial conventions
 // (position / normal / uv attributes and the standard matrices are injected).
 
-// Atmosphere, ported to GLSL from the three.js example "webgpu_tsl_earth" (MIT):
-// a fresnel rim whose colour goes from daylight blue to twilight orange with the
-// sun angle, drawn on a slightly larger back-facing shell and mixed into the surface.
+// Atmosphere: single scattering of sunlight by air (Rayleigh) and haze (Mie), integrated
+// along the view ray in a few steps. The same function tints the surface seen through the
+// air and draws the glow of the limb on a slightly larger back-facing shell. The path to
+// the sun is not marched: its optical depth comes from the local density and an air-mass
+// factor, which is what keeps this cheap. Lengths are in planet radii; the shell is
+// thicker than the real atmosphere so that it covers more than a pixel.
 export const ATMO_GLSL = /* glsl */ `
-const vec3 ATMO_DAY = vec3(0.302, 0.698, 1.0);       // #4db2ff
-const vec3 ATMO_TWILIGHT = vec3(0.737, 0.286, 0.043); // #bc490b
-vec3 atmosphereColor(float sunOrientation) {
-  return mix(ATMO_TWILIGHT, ATMO_DAY, smoothstep(-0.25, 0.75, sunOrientation));
+const float ATMO_TOP = 1.04;
+const float ATMO_HR = 0.010;                       // scale height of air
+const float ATMO_HM = 0.004;                       // scale height of haze
+const vec3  ATMO_TAU_R = vec3(0.046, 0.108, 0.265); // vertical optical depth of Earth's air: red, green, blue
+const float ATMO_TAU_M = 0.05;                     // and of a clear-sky haze
+const float ATMO_SUN = 8.0;
+const int   ATMO_STEPS = 8;
+
+void atmosphere(vec3 ro, vec3 rd, float tEnd, vec3 L, out vec3 inscatter, out vec3 trans) {
+  inscatter = vec3(0.0);
+  trans = vec3(1.0);
+  float b = dot(ro, rd);
+  float disc = b * b - dot(ro, ro) + ATMO_TOP * ATMO_TOP;
+  if (disc <= 0.0) return;
+  float sq = sqrt(disc);
+  float t0 = max(-b - sq, 0.0);
+  float t1 = min(-b + sq, tEnd);
+  if (t1 <= t0) return;
+  float dt = (t1 - t0) / float(ATMO_STEPS);
+  float mu = dot(rd, L);
+  float phaseR = 0.0596831 * (1.0 + mu * mu);
+  float phaseM = 0.0795775 * 0.4224 / pow(1.5776 - 1.52 * mu, 1.5); // Henyey-Greenstein, g = 0.76
+  vec3 betaR = ATMO_TAU_R / ATMO_HR;
+  float betaM = ATMO_TAU_M / ATMO_HM;
+  float odR = 0.0;
+  float odM = 0.0;
+  vec3 sumR = vec3(0.0);
+  vec3 sumM = vec3(0.0);
+  for (int i = 0; i < ATMO_STEPS; i++) {
+    vec3 p = ro + rd * (t0 + (float(i) + 0.5) * dt);
+    float r = length(p);
+    float h = max(r - 1.0, 0.0);
+    float dR = exp(-h / ATMO_HR);
+    float dM = exp(-h / ATMO_HM);
+    odR += dR * dt;
+    odM += dM * dt;
+    // towards the sun: air mass grows to the horizon and beyond it, and the planet casts a shadow
+    float cz = dot(p, L) / r;
+    float am = exp(max(-cz, 0.0) * 25.0) / (max(cz, 0.0) + 0.08);
+    float lit = cz > 0.0 ? 1.0 : smoothstep(1.0, 1.0 + 2.0 * ATMO_HR, r * sqrt(max(1.0 - cz * cz, 0.0)));
+    vec3 tau = betaR * (odR + dR * ATMO_HR * am) + betaM * 1.1 * (odM + dM * ATMO_HM * am);
+    vec3 att = exp(-tau) * lit;
+    sumR += dR * dt * att;
+    sumM += dM * dt * att;
+  }
+  inscatter = ATMO_SUN * (sumR * betaR * phaseR + sumM * betaM * phaseM);
+  trans = exp(-(betaR * odR + betaM * 1.1 * odM));
 }
+
+// Soft shoulder: unchanged below 0.8, highlights roll off instead of clipping
+vec3 shoulder(vec3 c) { return mix(c, 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2)), step(0.8, c)); }
 `;
 
 export const EARTH_VERT = /* glsl */ `
@@ -29,9 +78,10 @@ void main() {
 export const EARTH_FRAG = /* glsl */ `
 uniform sampler2D uDay;       // colour map
 uniform sampler2D uClouds;    // cloud cover (grey)
+uniform sampler2D uNight;     // city lights
 uniform sampler2D uNormal;    // tangent-space relief
 uniform sampler2D uSpec;      // ocean mask (white = water)
-uniform sampler2D uTempBase;  // surface temperature, 0..1 = 192..320 K
+uniform sampler2D uTempBase;  // surface temperature climatology (NASA POWER), 0..1 = 192..320 K
 uniform sampler2D uPalette;   // NASA thermal palette, 192..320 K
 uniform sampler2D uSat;       // NASA GIBS imagery for the selected date
 uniform sampler2D uRegion;    // per-cell trend: R value, G significant, A valid
@@ -154,18 +204,35 @@ void main() {
   vec3 nm = texture2D(uNormal, vUv).xyz * 2.0 - 1.0;
   vec3 Nn = normalize(N + uRelief * (T * nm.x + B * nm.y));
   float hl = clamp(dot(Nn, L) * 0.5 + 0.5, 0.0, 1.0);
-  float light = 0.08 + 1.12 * hl * hl;
-  vec3 H = normalize(L + V);
-  float spec = pow(max(dot(N, H), 0.0), 48.0) * ocean * 0.30 * step(0.0, dot(N, L));
-  vec3 nat = toLinear(dayS) * light + vec3(spec);
-  float cl = texture2D(uClouds, vec2(vUv.x + uTime * 0.0012, vUv.y)).r;
-  float hlc = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
-  nat = mix(nat, vec3(0.06 + 1.0 * hlc * hlc), cl * uCloudAmt);
-  vec3 col = toDisplay(nat);
   float sunOrientation = dot(N, L);
-  float fresnel = 1.0 - abs(dot(V, N));
-  float atmoMix = clamp(smoothstep(-0.5, 1.0, sunOrientation) * fresnel * fresnel, 0.0, 1.0);
-  col = mix(col, atmosphereColor(sunOrientation), atmoMix * uAtmoMix);
+  // past the terminator the ground goes dark, so the night side reads as night
+  float day = smoothstep(-0.12, 0.18, sunOrientation);
+  float light = (0.08 + 1.12 * hl * hl) * mix(0.02, 1.0, day);
+  vec3 H = normalize(L + V);
+  float lit = smoothstep(0.0, 0.12, sunOrientation);
+  // glint: a tight core and a wide sheen, stronger at grazing angles (Schlick, F0 = 0.02)
+  float ndh = max(dot(N, H), 0.0);
+  float fres = 0.02 + 0.98 * pow(1.0 - max(dot(V, H), 0.0), 5.0);
+  float spec = (0.24 * pow(ndh, 72.0) + 0.05 * pow(ndh, 10.0)) * (0.7 + 6.0 * fres) * ocean * lit;
+  vec2 cuv = vec2(vUv.x + uTime * 0.0012, vUv.y);
+  float cl = texture2D(uClouds, cuv).r;
+  // the shadow of the cloud that stands between this place and the sun
+  vec2 toSun = vec2(dot(L, T) * 0.5 / max(cos(radians(lat)), 0.25), dot(L, B)) * 0.0035;
+  float shade = 1.0 - 0.4 * texture2D(uClouds, cuv + toSun).r * uCloudAmt * lit;
+  vec3 nat = toLinear(dayS) * light * shade + vec3(spec);
+  float hlc = clamp(sunOrientation * 0.5 + 0.5, 0.0, 1.0);
+  nat = mix(nat, vec3(0.06 + 1.0 * hlc * hlc) * mix(0.03, 1.0, day), cl * uCloudAmt);
+  // city lights where the sun is down, dimmed under cloud
+  vec3 nightS = toLinear(texture2D(uNight, vUv).rgb);
+  float lights = smoothstep(0.02, 0.25, dot(nightS, vec3(0.299, 0.587, 0.114)));
+  nat += nightS * lights * 2.6 * (1.0 - day) * (1.0 - 0.6 * cl * uCloudAmt);
+  // the air between the eye and the ground: it dims what is behind and adds its own light
+  if (uAtmoMix > 0.0 && uMode < 0.5) {
+    vec3 airLight; vec3 airPass;
+    atmosphere(cameraPosition, -V, length(cameraPosition - vPos), L, airLight, airPass);
+    nat = mix(nat, nat * airPass + airLight, uAtmoMix);
+  }
+  vec3 col = toDisplay(shoulder(nat));
 
   // ---- data views: quiet grey base, data on top, coastlines over the data ----
   vec3 base = vec3(0.10 + 0.45 * lum) * mix(1.0, 0.72, ocean);
@@ -218,7 +285,13 @@ void main() {
         vec3 rc = divB(r.r * 2.0 - 1.0);
         if (r.g < 0.5) {
           // not significant: hatch the cell so only robust change reads as solid colour
-          float h = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 7.0));
+          // Stripes fixed to the surface, so they turn with the globe instead of sliding over it.
+          // Their spacing in degrees is a power of two chosen to stay near 8 pixels at any zoom.
+          float hg = lon + lat;
+          float hpx = max(fwidth(hg), 1e-6);
+          float hstep = exp2(floor(log2(hpx * 8.0) + 0.5));
+          float hw = hpx / hstep;
+          float h = smoothstep(0.5 - hw, 0.5 + hw, abs(fract(hg / hstep) - 0.5) * 2.0);
           rc = mix(rc, base, 0.2 + 0.65 * h);
         }
         col = mix(col, rc, 0.94);
@@ -269,11 +342,10 @@ varying vec3 vPw;
 void main() {
   vec3 N = normalize(vNw);
   vec3 V = normalize(cameraPosition - vPw);
-  float fresnel = 1.0 - abs(dot(V, N));
-  float sunOrientation = dot(N, normalize(uSunDir));
-  // opaque where the shell meets the planet (fresnel 0.73), gone at its outer edge
-  float alpha = pow(clamp((1.0 - fresnel) / 0.27, 0.0, 1.0), 3.0) * smoothstep(-0.5, 1.0, sunOrientation);
-  gl_FragColor = vec4(atmosphereColor(sunOrientation), alpha * uAtmo);
+  // the ray leaves the eye, crosses the shell and goes on to space; the light it gathers is added to what is behind
+  vec3 airLight; vec3 airPass;
+  atmosphere(cameraPosition, -V, 1e6, normalize(uSunDir), airLight, airPass);
+  gl_FragColor = vec4(pow(clamp(shoulder(airLight), 0.0, 1.0), vec3(1.0 / 2.2)), uAtmo);
 }
 `;
 
@@ -308,7 +380,7 @@ export function earthUniformDefaults() {
   };
 }
 
-export const EARTH_SAMPLERS = ['uDay', 'uClouds', 'uNormal', 'uSpec', 'uTempBase', 'uPalette', 'uSat', 'uRegion', 'uSim'];
+export const EARTH_SAMPLERS = ['uDay', 'uClouds', 'uNight', 'uNormal', 'uSpec', 'uTempBase', 'uPalette', 'uSat', 'uRegion', 'uSim'];
 
 // ---------------------------------------------------------------------------
 // The prediction engine: a partial differential equation solved on the GPU.

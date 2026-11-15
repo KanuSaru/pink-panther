@@ -1,9 +1,9 @@
 // SI disclosure (NASA Space Apps 2026): this file was generated with Claude (Anthropic), a large language model, directed by the team.
 // Application state and interface wiring.
 import { createGlobe } from './globe.js';
-import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POWER_FIRST_YEAR, GIBS_FIRST_YEAR, HORIZON_MAX, REGION_SIZE, SOURCES, CREDITS } from './config.js';
+import { VARIABLES, GROUPS, EXAMPLES, PALETTES, TREND_COLORS, paletteFloats, POWER_FIRST_YEAR, GIBS_FIRST_YEAR, HORIZON_MAX, TEMP_BASE_PERIOD, REGION_SIZE, SOURCES, CREDITS } from './config.js';
 import { fetchPoint, fetchPointAll, fetchRegion, fetchGistemp, gibsUrls, lastCompleteYear } from './data.js';
-import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES, screenVariables, seasonBreakdown, comparePlaces } from './analysis.js';
+import { seriesFromPower, parseGistempZonal, analyzeSeries, analyzeRegion, regionTexture, niceRange, BAND_EDGES, zonalBlend, screenVariables, seasonBreakdown, comparePlaces } from './analysis.js';
 import { mean } from './stats.js';
 import { EBM, calibrate, project } from './ebm.js';
 import { SIM_W, SIM_H } from './shaders.js';
@@ -37,6 +37,8 @@ const state = {
   scale: 2.75,
   gistemp: null, gistempMeta: null, gistempError: null,
   planet: null, bands: [], bandsRef: null,
+  bandNow: null,              // band anomalies for the year on the timeline
+  tempBase: null,             // pixels of the base temperature field: { w, h, px }
   pointRaw: null, pointAnalysis: null, pointError: null,
   allRaw: null,               // every variable at the point: { dicts, fill, key }
   screen: null, seasons: null, // which variables change here, and in which months
@@ -74,6 +76,7 @@ function init() {
   Promise.allSettled([
     globe.setImage('uDay', './assets/earth_day.jpg', { repeatX: true }),
     globe.setImage('uClouds', './assets/earth_clouds.jpg', { repeatX: true }),
+    globe.setImage('uNight', './assets/earth_night.jpg', { repeatX: true }),
     globe.setImage('uNormal', './assets/earth_normal.jpg'),
     globe.setImage('uSpec', './assets/earth_specular.jpg'),
     globe.setImage('uTempBase', './assets/temp_base.png', { mipmaps: false }),
@@ -88,6 +91,8 @@ function init() {
   renderAll();
   loadPlanet();
   if (shared) selectPoint(shared.lat, shared.lon);
+  loadTempBase().then((b) => { state.tempBase = b; renderLegend(); }).catch((e) => console.warn('Base temperature field unavailable; no kelvin read-out', e));
+  bindProbe();
   loadOcean().then((o) => { state.ocean = o; if (state.gistemp) recompute(); }).catch((e) => console.warn('Ocean mask unavailable; planet projections fall back to the trend', e));
 }
 
@@ -372,6 +377,75 @@ function loadOcean() {
   });
 }
 
+// The base field of the Temperature view, kept as pixels so a value can be read at any place
+function loadTempBase() {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      resolve({ w: c.width, h: c.height, px: ctx.getImageData(0, 0, c.width, c.height).data });
+    };
+    img.onerror = () => reject(new Error('temperature field failed to load'));
+    img.src = './assets/temp_base.png';
+  });
+}
+
+// What the data views show at one place, as numbers. The same arithmetic as the shader,
+// without the visual exaggeration: the NASA POWER climatology (0..1 = 192..320 K) plus the
+// change of the latitude band since the years of that climatology.
+function estimateAt(lat, lon) {
+  if (!state.bandNow || !state.bandsRef) return null;
+  const anomaly = zonalBlend(lat, state.bandNow);
+  let kelvin = null;
+  const b = state.tempBase;
+  if (b) {
+    const x = clamp(Math.floor(((lon + 180) / 360) * b.w), 0, b.w - 1);
+    const y = clamp(Math.floor(((90 - lat) / 180) * b.h), 0, b.h - 1);
+    kelvin = 192 + (b.px[(y * b.w + x) * 4] / 255) * 128 + (anomaly - zonalBlend(lat, state.bandsRef));
+  }
+  return { anomaly, kelvin };
+}
+
+// The estimate in words for the current view, or null when the view has no value to read
+function estimateText(lat, lon) {
+  if (state.view !== 'temperature' && state.view !== 'anomaly') return null;
+  const e = estimateAt(lat, lon);
+  if (!e) return null;
+  if (state.view === 'anomaly') return t('probeAnom', { x: num(e.anomaly, 2, { sign: true }) });
+  return e.kelvin == null ? null : t('probeTemp', { k: num(e.kelvin, 0), c: num(e.kelvin - 273.15, 0) });
+}
+
+// A label that follows the mouse over the globe. Nothing is requested: the value is computed here.
+function bindProbe() {
+  const canvas = $('globe'), probe = $('probe');
+  let pending = null, queued = false;
+  const hide = () => { pending = null; probe.hidden = true; };
+  const show = () => {
+    queued = false;
+    if (!pending) return;
+    const { x, y } = pending;
+    const ll = globe.pick(x, y);
+    const text = ll && estimateText(ll.lat, ll.lon);
+    if (!text) { probe.hidden = true; return; }
+    probe.textContent = `${formatLatLon(ll.lat, ll.lon, getLang())} · ${text}`;
+    probe.hidden = false;
+    const w = probe.offsetWidth, h = probe.offsetHeight;
+    probe.style.left = `${clamp(x + 14, 8, innerWidth - w - 8)}px`;
+    probe.style.top = `${y + 18 + h > innerHeight - 8 ? y - h - 12 : y + 18}px`;
+  };
+  canvas.addEventListener('pointermove', (e) => {
+    // a finger has no hover, and a pressed button means the globe is being turned
+    if (e.pointerType !== 'mouse' || e.buttons) { hide(); return; }
+    pending = { x: e.clientX, y: e.clientY };
+    if (!queued) { queued = true; requestAnimationFrame(show); }
+  });
+  canvas.addEventListener('pointerleave', hide);
+  canvas.addEventListener('pointerdown', hide);
+}
+
 // Calibrate the energy balance model on the observed record and project it.
 function recomputeModel() {
   const g = state.gistemp;
@@ -415,11 +489,10 @@ function recomputeModel() {
 async function loadPlanet() {
   state.busy = 'loadingGistemp';
   renderFindings();
+  const use = (g) => { state.gistemp = parseGistempZonal(g.csv); state.gistempMeta = g; state.gistempError = null; };
   try {
-    const g = await fetchGistemp();
-    state.gistemp = parseGistempZonal(g.csv);
-    state.gistempMeta = g;
-    state.gistempError = null;
+    // a newer table from NASA replaces the saved copy when it arrives
+    use(await fetchGistemp((fresh) => { use(fresh); recompute(); }));
   } catch (e) {
     state.gistempError = e.message || String(e);
   }
@@ -526,7 +599,9 @@ function recompute() {
     const opts = { period, baseline: [1951, 1980], alpha: state.alpha };
     state.planet = analyzeSeries(g.years, g.global, opts);
     state.bands = g.bands.map((b) => analyzeSeries(g.years, b, opts));
-    state.bandsRef = g.bands.map((b) => mean(b.slice(-10)));
+    // the base field of the Temperature view is the mean of these years, so changes are counted from them
+    const inBase = g.years.map((y) => y >= TEMP_BASE_PERIOD[0] && y <= TEMP_BASE_PERIOD[1]);
+    state.bandsRef = g.bands.map((b) => mean(b.filter((_, i) => inBase[i])));
   }
   if (state.pointRaw) {
     const s = seriesFromPower(state.pointRaw.dict, state.season, state.pointRaw.fill);
@@ -577,6 +652,7 @@ function applyBands() {
   const modelled = !!state.model && state.model.gpu && state.year > last;
   if (modelled) globe.sim.setTarget(state.year);
   globe.set('uSimOn', modelled ? 1 : 0);
+  state.bandNow = vals;
   globe.set('uBands', vals);
   globe.set('uBandsRef', new Float32Array(state.bandsRef));
   globe.set('uRange', state.scale);
@@ -630,19 +706,21 @@ async function loadSat() {
   const key = `${v.gibs}|${y}|${m}`;
   if (state.sat?.key === key && state.sat.status !== 'fail') return;
   const token = ++satToken;
-  state.sat = { key, status: 'loading', layer: v.gibs, y, m };
+  // a change of variable or example clears state.sat while an image is still on its way
+  const sat = state.sat = { key, status: 'loading', layer: v.gibs, y, m };
+  const current = () => token === satToken && state.sat === sat;
   renderLegend();
   for (const url of gibsUrls(v.gibs, y, m)) {
     try {
-      await globe.setImage('uSat', url, { mipmaps: false, accept: () => token === satToken });
-      if (token !== satToken) return;
-      state.sat.status = 'ok';
+      await globe.setImage('uSat', url, { mipmaps: false, accept: current });
+      if (!current()) return;
+      sat.status = 'ok';
       globe.set('uSatOn', 1);
       renderLegend();
       return;
     } catch { /* try the proxy next */ }
   }
-  if (token === satToken) { state.sat.status = 'fail'; globe.set('uSatOn', 0); renderLegend(); }
+  if (current()) { sat.status = 'fail'; globe.set('uSatOn', 0); renderLegend(); }
 }
 
 // ------------------------------------------------------------------ rendering
@@ -991,6 +1069,18 @@ function renderLegend() {
       img.addEventListener('error', () => img.remove());
       row(`${t('legendSat')}: ${s.layer.replaceAll('_', ' ')}, ${when}`, img);
     }
+  }
+  if (state.point) {
+    const text = estimateText(state.point.lat, state.point.lon);
+    // the map is a coarse climatology; where NASA POWER has the series of this point, give its mean over the same years first
+    const ts = state.view === 'temperature' && state.allRaw?.key === `${state.point.lat},${state.point.lon}` && state.allRaw.dicts.TS;
+    let measured = '';
+    if (ts) {
+      const s = seriesFromPower(ts, 'ANN', state.allRaw.fill);
+      const ref = s.values.filter((_, i) => s.years[i] >= TEMP_BASE_PERIOD[0] && s.years[i] <= TEMP_BASE_PERIOD[1]);
+      if (ref.length >= 10) measured = `${t('probePower', { k: num(mean(ref) + 273.15, 0), c: num(mean(ref), 0), a: TEMP_BASE_PERIOD[0], b: TEMP_BASE_PERIOD[1] })} `;
+    }
+    if (text) row(`${t('legendPoint', { x: placeLabel(state.point) })}: ${measured}${measured ? t('probeMap', { x: text }) : text}`);
   }
   if (state.region) {
     const v = variable();

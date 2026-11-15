@@ -2,7 +2,7 @@
 // Run: node tests/stats.test.mjs
 import assert from 'node:assert/strict';
 import * as S from '../src/stats.js';
-import { seriesFromPower, analyzeSeries, parseGistempZonal, analyzeRegion, regionTexture, niceRange, screenVariables, seasonBreakdown, comparePlaces } from '../src/analysis.js';
+import { seriesFromPower, analyzeSeries, parseGistempZonal, analyzeRegion, regionTexture, niceRange, screenVariables, seasonBreakdown, comparePlaces, zonalBlend } from '../src/analysis.js';
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} expected ${b}, got ${a}`);
 let n = 0;
@@ -194,6 +194,14 @@ test('comparing two places: opposite trends are reported as opposite and differe
   const same = analyzeSeries(years, years.map((y) => 8 + 0.03 * (y - 1981) + 0.3 * rnd()));
   const c = comparePlaces(up, down); assert.ok(c.opposite && c.differ);
   const c2 = comparePlaces(up, same); assert.ok(!c2.opposite && !c2.differ);
+});
+
+test('zonal blend: band centres, band edges and the poles', () => {
+  const v = [1, 2, 3, 4, 5, 6, 7, 8]; // south to north
+  near(zonalBlend(-77, v), 1, 1e-12); near(zonalBlend(12, v), 5, 1e-12); near(zonalBlend(54, v), 7, 1e-12);
+  near(zonalBlend(-90, v), 1, 1e-12); near(zonalBlend(90, v), 8, 1e-12);
+  near(zonalBlend(0, v), 4.5, 1e-12); near(zonalBlend(64, v), 7.5, 1e-12); // an edge is the mean of its neighbours
+  assert.ok(zonalBlend(23, v) > 5 && zonalBlend(23, v) < 5.5 && zonalBlend(25, v) > 5.5); // continuous across the edge
 });
 
 console.log(`\n${n} tests passed`);
