@@ -706,19 +706,21 @@ async function loadSat() {
   const key = `${v.gibs}|${y}|${m}`;
   if (state.sat?.key === key && state.sat.status !== 'fail') return;
   const token = ++satToken;
-  state.sat = { key, status: 'loading', layer: v.gibs, y, m };
+  // a change of variable or example clears state.sat while an image is still on its way
+  const sat = state.sat = { key, status: 'loading', layer: v.gibs, y, m };
+  const current = () => token === satToken && state.sat === sat;
   renderLegend();
   for (const url of gibsUrls(v.gibs, y, m)) {
     try {
-      await globe.setImage('uSat', url, { mipmaps: false, accept: () => token === satToken });
-      if (token !== satToken) return;
-      state.sat.status = 'ok';
+      await globe.setImage('uSat', url, { mipmaps: false, accept: current });
+      if (!current()) return;
+      sat.status = 'ok';
       globe.set('uSatOn', 1);
       renderLegend();
       return;
     } catch { /* try the proxy next */ }
   }
-  if (token === satToken) { state.sat.status = 'fail'; globe.set('uSatOn', 0); renderLegend(); }
+  if (current()) { sat.status = 'fail'; globe.set('uSatOn', 0); renderLegend(); }
 }
 
 // ------------------------------------------------------------------ rendering

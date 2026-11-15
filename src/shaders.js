@@ -2,15 +2,64 @@
 // GLSL for the globe. Written against three.js ShaderMaterial conventions
 // (position / normal / uv attributes and the standard matrices are injected).
 
-// Atmosphere, ported to GLSL from the three.js example "webgpu_tsl_earth" (MIT):
-// a fresnel rim whose colour goes from daylight blue to twilight orange with the
-// sun angle, drawn on a slightly larger back-facing shell and mixed into the surface.
+// Atmosphere: single scattering of sunlight by air (Rayleigh) and haze (Mie), integrated
+// along the view ray in a few steps. The same function tints the surface seen through the
+// air and draws the glow of the limb on a slightly larger back-facing shell. The path to
+// the sun is not marched: its optical depth comes from the local density and an air-mass
+// factor, which is what keeps this cheap. Lengths are in planet radii; the shell is
+// thicker than the real atmosphere so that it covers more than a pixel.
 export const ATMO_GLSL = /* glsl */ `
-const vec3 ATMO_DAY = vec3(0.302, 0.698, 1.0);       // #4db2ff
-const vec3 ATMO_TWILIGHT = vec3(0.737, 0.286, 0.043); // #bc490b
-vec3 atmosphereColor(float sunOrientation) {
-  return mix(ATMO_TWILIGHT, ATMO_DAY, smoothstep(-0.25, 0.75, sunOrientation));
+const float ATMO_TOP = 1.04;
+const float ATMO_HR = 0.010;                       // scale height of air
+const float ATMO_HM = 0.004;                       // scale height of haze
+const vec3  ATMO_TAU_R = vec3(0.046, 0.108, 0.265); // vertical optical depth of Earth's air: red, green, blue
+const float ATMO_TAU_M = 0.05;                     // and of a clear-sky haze
+const float ATMO_SUN = 8.0;
+const int   ATMO_STEPS = 8;
+
+void atmosphere(vec3 ro, vec3 rd, float tEnd, vec3 L, out vec3 inscatter, out vec3 trans) {
+  inscatter = vec3(0.0);
+  trans = vec3(1.0);
+  float b = dot(ro, rd);
+  float disc = b * b - dot(ro, ro) + ATMO_TOP * ATMO_TOP;
+  if (disc <= 0.0) return;
+  float sq = sqrt(disc);
+  float t0 = max(-b - sq, 0.0);
+  float t1 = min(-b + sq, tEnd);
+  if (t1 <= t0) return;
+  float dt = (t1 - t0) / float(ATMO_STEPS);
+  float mu = dot(rd, L);
+  float phaseR = 0.0596831 * (1.0 + mu * mu);
+  float phaseM = 0.0795775 * 0.4224 / pow(1.5776 - 1.52 * mu, 1.5); // Henyey-Greenstein, g = 0.76
+  vec3 betaR = ATMO_TAU_R / ATMO_HR;
+  float betaM = ATMO_TAU_M / ATMO_HM;
+  float odR = 0.0;
+  float odM = 0.0;
+  vec3 sumR = vec3(0.0);
+  vec3 sumM = vec3(0.0);
+  for (int i = 0; i < ATMO_STEPS; i++) {
+    vec3 p = ro + rd * (t0 + (float(i) + 0.5) * dt);
+    float r = length(p);
+    float h = max(r - 1.0, 0.0);
+    float dR = exp(-h / ATMO_HR);
+    float dM = exp(-h / ATMO_HM);
+    odR += dR * dt;
+    odM += dM * dt;
+    // towards the sun: air mass grows to the horizon and beyond it, and the planet casts a shadow
+    float cz = dot(p, L) / r;
+    float am = exp(max(-cz, 0.0) * 25.0) / (max(cz, 0.0) + 0.08);
+    float lit = cz > 0.0 ? 1.0 : smoothstep(1.0, 1.0 + 2.0 * ATMO_HR, r * sqrt(max(1.0 - cz * cz, 0.0)));
+    vec3 tau = betaR * (odR + dR * ATMO_HR * am) + betaM * 1.1 * (odM + dM * ATMO_HM * am);
+    vec3 att = exp(-tau) * lit;
+    sumR += dR * dt * att;
+    sumM += dM * dt * att;
+  }
+  inscatter = ATMO_SUN * (sumR * betaR * phaseR + sumM * betaM * phaseM);
+  trans = exp(-(betaR * odR + betaM * 1.1 * odM));
 }
+
+// Soft shoulder: unchanged below 0.8, highlights roll off instead of clipping
+vec3 shoulder(vec3 c) { return mix(c, 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2)), step(0.8, c)); }
 `;
 
 export const EARTH_VERT = /* glsl */ `
@@ -70,8 +119,6 @@ varying vec3 vPos;
 ` + ATMO_GLSL + /* glsl */ `
 vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 toDisplay(vec3 c) { return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)); }
-// Soft shoulder for the natural view: unchanged below 0.8, highlights roll off instead of clipping
-vec3 shoulder(vec3 c) { return mix(c, 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2)), step(0.8, c)); }
 
 // Edges of the eight GISTEMP latitude bands
 float bandEdge(float i) {
@@ -159,7 +206,7 @@ void main() {
   float hl = clamp(dot(Nn, L) * 0.5 + 0.5, 0.0, 1.0);
   float sunOrientation = dot(N, L);
   // past the terminator the ground goes dark, so the night side reads as night
-  float day = smoothstep(-0.05, 0.3, sunOrientation);
+  float day = smoothstep(-0.12, 0.18, sunOrientation);
   float light = (0.08 + 1.12 * hl * hl) * mix(0.02, 1.0, day);
   vec3 H = normalize(L + V);
   float lit = smoothstep(0.0, 0.12, sunOrientation);
@@ -179,10 +226,13 @@ void main() {
   vec3 nightS = toLinear(texture2D(uNight, vUv).rgb);
   float lights = smoothstep(0.02, 0.25, dot(nightS, vec3(0.299, 0.587, 0.114)));
   nat += nightS * lights * 2.6 * (1.0 - day) * (1.0 - 0.6 * cl * uCloudAmt);
+  // the air between the eye and the ground: it dims what is behind and adds its own light
+  if (uAtmoMix > 0.0 && uMode < 0.5) {
+    vec3 airLight; vec3 airPass;
+    atmosphere(cameraPosition, -V, length(cameraPosition - vPos), L, airLight, airPass);
+    nat = mix(nat, nat * airPass + airLight, uAtmoMix);
+  }
   vec3 col = toDisplay(shoulder(nat));
-  float fresnel = 1.0 - abs(dot(V, N));
-  float atmoMix = clamp(smoothstep(-0.5, 1.0, sunOrientation) * fresnel * fresnel, 0.0, 1.0);
-  col = mix(col, atmosphereColor(sunOrientation), atmoMix * uAtmoMix);
 
   // ---- data views: quiet grey base, data on top, coastlines over the data ----
   vec3 base = vec3(0.10 + 0.45 * lum) * mix(1.0, 0.72, ocean);
@@ -292,11 +342,10 @@ varying vec3 vPw;
 void main() {
   vec3 N = normalize(vNw);
   vec3 V = normalize(cameraPosition - vPw);
-  float fresnel = 1.0 - abs(dot(V, N));
-  float sunOrientation = dot(N, normalize(uSunDir));
-  // opaque where the shell meets the planet (fresnel 0.73), gone at its outer edge
-  float alpha = pow(clamp((1.0 - fresnel) / 0.27, 0.0, 1.0), 3.0) * smoothstep(-0.5, 1.0, sunOrientation);
-  gl_FragColor = vec4(atmosphereColor(sunOrientation), alpha * uAtmo);
+  // the ray leaves the eye, crosses the shell and goes on to space; the light it gathers is added to what is behind
+  vec3 airLight; vec3 airPass;
+  atmosphere(cameraPosition, -V, 1e6, normalize(uSunDir), airLight, airPass);
+  gl_FragColor = vec4(pow(clamp(shoulder(airLight), 0.0, 1.0), vec3(1.0 / 2.2)), uAtmo);
 }
 `;
 

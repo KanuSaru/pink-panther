@@ -36,7 +36,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     new THREE.SphereGeometry(ATMO_SCALE, 96, 48),
     new THREE.ShaderMaterial({
       uniforms: atmoUniforms, vertexShader: ATMO_VERT, fragmentShader: ATMO_FRAG,
-      side: THREE.BackSide, transparent: true, depthWrite: false,
+      side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     }),
   );
   scene.add(atmo);

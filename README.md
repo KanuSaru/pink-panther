@@ -25,7 +25,7 @@ Six one-click examples (Barranquilla, Svalbard, the Sahel, the Amazon, the Aral 
 
 ### Globe views
 
-- **Natural**: day map, relief, ocean glint, clouds with their shadows, city lights along the night edge, and atmosphere.
+- **Natural**: day map, relief, ocean glint, clouds with their shadows, city lights along the night edge, and an atmosphere computed by single scattering (Rayleigh and Mie).
 - **Anomaly**: temperature difference from 1951–1980 in eight latitude bands (NASA GISTEMP) for the year on the timeline.
 - **Temperature**: the mean surface temperature of 2001–2025 (NASA POWER climatology, MERRA-2) shifted by each band's change since those years, in a NASA thermal palette.
 - **Satellite**: the monthly NASA GIBS image of the selected variable.

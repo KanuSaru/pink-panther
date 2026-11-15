@@ -26,7 +26,6 @@ No NASA logos, insignia or mission identifiers are used anywhere in the project.
 | Resource | Use | License |
 |---|---|---|
 | three.js r170 (with OrbitControls), loaded from jsDelivr | 3D rendering | MIT |
-| three.js example `webgpu_tsl_earth` | The atmosphere shader is a GLSL port of this example's technique and constants | MIT |
 | VisualPDE (visualpde.com; Walker, Townsend, Chudasama and Krause, 2023) | Method of the prediction engine: a PDE advanced by explicit time steps in a fragment shader between two alternating float textures. The idea was followed; no code was copied | Open source site; paper in Bull. Math. Biol. 85:113 |
 | ColorBrewer palettes (RdBu, BrBG, PuOr) by Cynthia Brewer | Diverging colour scales | Apache 2.0 |
 | Instrument Sans, from Google Fonts | Typeface | SIL Open Font License 1.1 |
