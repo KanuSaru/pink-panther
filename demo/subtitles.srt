@@ -1,0 +1,40 @@
+1
+00:00:00,000 --> 00:00:02,400
+We're team [TEAM NAME], from Barranquilla, Colombia.
+
+2
+00:00:02,400 --> 00:00:05,600
+Earth data change constantly.
+But is a change real, or just noise?
+
+3
+00:00:05,600 --> 00:00:07,000
+This is Pink Panther.
+
+4
+00:00:07,000 --> 00:00:11,200
+Pick any place on the globe.
+It tests nine NASA variables,
+
+5
+00:00:11,200 --> 00:00:15,600
+shows what's changing, how much,
+and whether it's statistically significant.
+
+6
+00:00:15,600 --> 00:00:18,600
+The same variable can rise here and fall there.
+
+7
+00:00:18,600 --> 00:00:24,400
+And a physics model, calibrated on NASA's record,
+shows where the planet is heading.
+
+8
+00:00:24,400 --> 00:00:27,000
+Open data, a tested answer.
+
+9
+00:00:27,000 --> 00:00:30,000
+pink-panther-pi.vercel.app
+Voice generated with ElevenLabs (AI)

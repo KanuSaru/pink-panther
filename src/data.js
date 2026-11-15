@@ -110,6 +110,9 @@ export async function fetchRegion({ box, parameter, start, onProgress }) {
     if (!Array.isArray(features) || features.length < 4) throw new Error('NASA POWER: empty region');
     return { features, fill: r.body.header?.fill_value ?? -999, url: r.url, fetchedAt: r.fetchedAt, sampled: false };
   } catch (regionalError) {
+    // Rate limited, or NASA answered and the request itself is wrong: 25 more requests
+    // would only make it worse. Let the interface offer a retry instead.
+    if (regionalError.status === 429 || (regionalError.status >= 400 && regionalError.status < 500 && regionalError.status !== 404)) throw regionalError;
     const n = 5, features = [];
     const pts = [];
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {

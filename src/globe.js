@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EARTH_VERT, EARTH_FRAG, ATMO_VERT, ATMO_FRAG, ATMO_SCALE, earthUniformDefaults, EARTH_SAMPLERS, SIM_VERT, SIM_FRAG, SIM_W, SIM_H } from './shaders.js';
-import { createSimDriver, physUniforms } from './simdriver.js';
+import { createSimDriver, physUniforms, createSmoother } from './simdriver.js';
 import { EBM } from './ebm.js';
 import { latLonToVec3, vec3ToLatLon } from './geo.js';
 
@@ -123,8 +123,12 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     uniforms[name].value = tex;
   }
 
+  // Band values and the observed/model switch ease towards their targets instead of jumping
+  const smoother = createSmoother(140);
+  const EASED = new Set(['uBands', 'uSimOn']);
   function set(name, value) {
     if (name === 'uAtmo') { atmoUniforms.uAtmo.value = value; uniforms.uAtmoMix.value = value; }
+    else if (EASED.has(name)) smoother.set(name, value, reduceMotion);
     else if (uniforms[name]) uniforms[name].value = value;
   }
 
@@ -141,7 +145,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     const u = {
       uState: { value: null }, uOcean: { value: null }, uRes: { value: [SIM_W, SIM_H] },
       uInit: { value: 0 }, uDt: { value: 0 }, uF: { value: 0 },
-      uLam: { value: new Float32Array(SIM_H) }, uT0: { value: new Float32Array(SIM_H) },
+      uLam: { value: new Float32Array(SIM_H) }, uGam: { value: new Float32Array(SIM_H).fill(EBM.GAMMA) }, uT0: { value: new Float32Array(SIM_H) },
       uTd0: { value: new Float32Array(SIM_H) }, uPi: { value: new Float32Array(SIM_H) },
     };
     for (const [k, v] of Object.entries(physUniforms(EBM))) u[k] = { value: v };
@@ -162,7 +166,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     };
     const driver = createSimDriver({
       load(c) {
-        u.uLam.value = c.lam; u.uT0.value = c.T0; u.uTd0.value = c.Td0; u.uPi.value = c.pi;
+        u.uLam.value = c.lam; u.uGam.value = c.gam; u.uT0.value = c.T0; u.uTd0.value = c.Td0; u.uPi.value = c.pi;
         const tex = new THREE.DataTexture(c.oceanBytes, SIM_W, SIM_H, THREE.RGBAFormat, THREE.UnsignedByteType);
         tex.minFilter = tex.magFilter = THREE.NearestFilter;
         tex.needsUpdate = true;
@@ -252,11 +256,13 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     // clouds thin out as you approach, so the surface and the data stay readable
     uniforms.uCloudAmt.value = Math.max(0.12, Math.min(0.85, (camera.position.length() - 1.5) / 1.6));
 
+    smoother.tick(now, (name, value) => { uniforms[name].value = value; });
+
     // let the model run towards the selected year, a couple of model years per frame
     if (sim && sim.driver.ready) {
       try {
         if (sim.driver.tick(2)) uniforms.uSim.value = sim.texture();
-      } catch (e) { console.warn('GPU solver stopped', e); sim = null; uniforms.uSimOn.value = 0; }
+      } catch (e) { console.warn('GPU solver stopped', e); sim = null; smoother.set('uSimOn', 0, true); }
       renderer.setRenderTarget(null);
     }
 

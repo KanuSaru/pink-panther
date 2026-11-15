@@ -37,3 +37,38 @@ export function createSimDriver(backend) {
 export function physUniforms(EBM) {
   return { uPhys: [EBM.D, EBM.CAP, EBM.C_LAND, EBM.C_MIX], uDeep: [EBM.C_DEEP, EBM.GAMMA] };
 }
+
+// Eases displayed values towards their targets so the globe does not jump when the year
+// changes (the timeline moves about nine years per second while playing).
+// `tau` is the time constant in milliseconds.
+export function createSmoother(tau = 140) {
+  const items = new Map();
+  let last = null;
+  return {
+    // the first value of a name, or any value with `instant`, is applied at once
+    set(name, value, instant = false) {
+      const scalar = typeof value === 'number';
+      const target = scalar ? [value] : Array.from(value);
+      const it = items.get(name);
+      if (!it || instant || it.cur.length !== target.length) items.set(name, { cur: target.slice(), target, scalar, dirty: true });
+      else it.target = target;
+    },
+    // call once per frame; `apply(name, value)` receives every value that moved
+    tick(now, apply) {
+      const dt = last == null ? 16 : Math.max(0, Math.min(100, now - last));
+      last = now;
+      const k = 1 - Math.exp(-dt / tau);
+      for (const [name, it] of items) {
+        let moved = it.dirty;
+        it.dirty = false;
+        for (let i = 0; i < it.cur.length; i++) {
+          const d = it.target[i] - it.cur[i];
+          if (d === 0) continue;
+          it.cur[i] = Math.abs(d) < 1e-4 ? it.target[i] : it.cur[i] + d * k;
+          moved = true;
+        }
+        if (moved) apply(name, it.scalar ? it.cur[0] : Float32Array.from(it.cur));
+      }
+    },
+  };
+}

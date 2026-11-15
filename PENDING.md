@@ -70,4 +70,4 @@ npm test                                         # 21 + 11 tests, all must pass
 python -m http.server 5178 --bind 127.0.0.1      # then open http://127.0.0.1:5178/
 ```
 
-Locally the planet view takes about 25 s to appear, because the live GISTEMP request times out before the saved copy is used. A GLSL error leaves the globe black and prints the compile log in the console.
+Locally the planet view appears in a few seconds: the saved GISTEMP copy and the live table are requested together. A GLSL error leaves the globe black and prints the compile log in the console.
