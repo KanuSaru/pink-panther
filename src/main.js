@@ -571,7 +571,7 @@ async function loadRegion() {
     state.regionRaw = raw;
     state.busy = null;
     recompute();
-    if (state.region) globe.flyTo((box.latMin + box.latMax) / 2, (box.lonMin + box.lonMax) / 2, 1.5);
+    if (state.region) globe.flyTo((box.latMin + box.latMax) / 2, (box.lonMin + box.lonMax) / 2, 1.9);
   } catch (e) {
     if (token !== regionToken) return;
     state.busy = null;
@@ -1059,8 +1059,7 @@ function renderLegend() {
     const ticks = document.createElement('div'); ticks.className = 'ticks';
     for (const k of [192, 224, 256, 288, 320]) { const s = document.createElement('span'); s.textContent = `${k} K`; ticks.append(s); }
     const box = document.createElement('div'); box.append(img, ticks);
-    // with a region on the globe the legend stays short, so it does not cover the box
-    row(`${t('legendTemp')}, ${state.year}${how}`, box, state.region ? null : `${t('tempNote')} ${t('legendExag', { n: $('exag').value })}`);
+    row(`${t('legendTemp')}, ${state.year}${how}`, box, `${t('tempNote')} ${t('legendExag', { n: $('exag').value })}`);
   }
   if (state.view === 'satellite') {
     const s = state.sat;
@@ -1075,7 +1074,7 @@ function renderLegend() {
       row(`${t('legendSat')}: ${s.layer.replaceAll('_', ' ')}, ${when}`, img);
     }
   }
-  if (state.point && !state.region) {
+  if (state.point) {
     const text = estimateText(state.point.lat, state.point.lon);
     // the map is a coarse climatology; where NASA POWER has the series of this point, give its mean over the same years first
     const ts = state.view === 'temperature' && state.allRaw?.key === `${state.point.lat},${state.point.lon}` && state.allRaw.dicts.TS;
