@@ -67,7 +67,7 @@ const es = {
   report: 'Descargar informe', copy: 'Copiar informe', copied: 'Informe copiado',
   source: 'Fuente', fetched: 'consultado {d}', snapshot: 'copia local',
   legendAnom: 'Anomalía de temperatura (°C, respecto a 1951–1980)', legendTemp: 'Temperatura de la superficie',
-  legendRegion: 'Tendencia en la región ({u} por década)', legendHatch: 'tramado: no significativo',
+  legendRegion: 'Tendencia en la región ({u} por década)', legendHatch: 'rayado: no significativo',
   legendSat: 'NASA GIBS',
   tempNote: 'Campo base: temperatura media de la superficie 2001–2025 de NASA POWER (MERRA-2), desplazada por el cambio de cada franja de latitud.',
   about: 'Acerca de', aboutBody: 'Prototipo para NASA Space Apps Challenge 2026. Las tendencias se estiman con la pendiente de Theil-Sen y se prueban con Mann-Kendall, corrigiendo la autocorrelación. La proyección del planeta usa un modelo de balance de energía resuelto en la GPU; la de un punto extiende su tendencia. Ninguna sustituye a los modelos climáticos completos.',
