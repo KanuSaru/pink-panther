@@ -275,6 +275,12 @@ dialog p + p { margin-top: 10px; }
 }
 .legend-title { font-size: 0.84rem; margin-bottom: 5px; }
 .legend-note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+.legend-key { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
+/* the same lines the globe draws on cells that are not significant: a darker shade of the cell */
+.hatch-swatch {
+  flex: none; width: 26px; height: 14px; border: 1px solid var(--line);
+  background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(0, 0, 0, 0.5) 4px 6px);
+}
 .blocks { display: flex; height: 11px; }
 .blocks span { flex: 1; }
 .blocks.smooth span { margin: 0; }

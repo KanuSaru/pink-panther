@@ -252,6 +252,7 @@ export function createGlobe(canvas, { onPick, onInteract } = {}) {
     uniforms.uSunDir.value = [sun.x, sun.y, sun.z];
     atmoUniforms.uSunDir.value = uniforms.uSunDir.value;
     uniforms.uTime.value = reduceMotion ? 0 : (now - t0) / 1000;
+    uniforms.uDpr.value = renderer.getPixelRatio();
     uniforms.uPx.value = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / renderer.domElement.height;
     // clouds thin out as you approach, so the surface and the data stay readable
     uniforms.uCloudAmt.value = Math.max(0.12, Math.min(0.85, (camera.position.length() - 1.5) / 1.6));

@@ -111,6 +111,7 @@ uniform sampler2D uSim;      // energy balance model state: R = T, G = deep ocea
 uniform vec2  uSimRes;
 uniform float uSimOn;        // 0 observed bands, 1 model field; in between while cross-fading
 uniform float uGrid;         // graticule strength in the data views
+uniform float uDpr;          // device pixels per CSS pixel
 
 varying vec2 vUv;
 varying vec3 vN;
@@ -119,6 +120,12 @@ varying vec3 vPos;
 ` + ATMO_GLSL + /* glsl */ `
 vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 toDisplay(vec3 c) { return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)); }
+
+// One level of hatching: thin lines every (spacing) degrees of g, 1 on a line; px is degrees per pixel.
+float hatchLines(float g, float spacing, float px) {
+  float w = 2.0 * px / spacing;
+  return smoothstep(0.68 - w, 0.68 + w, abs(fract(g / spacing) - 0.5) * 2.0);
+}
 
 // Edges of the eight GISTEMP latitude bands
 float bandEdge(float i) {
@@ -246,7 +253,8 @@ void main() {
   if (uAtmoMix > 0.0 && uMode < 0.5) {
     vec3 airLight; vec3 airPass;
     atmosphere(cameraPosition, -V, length(cameraPosition - vPos), L, airLight, airPass);
-    nat = mix(nat, nat * airPass + airLight, uAtmoMix);
+    // close to the ground the haze thins out with the clouds, so the surface stays readable
+    nat = mix(nat, nat * airPass + airLight, uAtmoMix * (0.3 + 0.7 * smoothstep(0.12, 0.85, uCloudAmt)));
   }
   vec3 col = toDisplay(shoulder(nat));
 
@@ -299,14 +307,17 @@ void main() {
         vec3 rc = divB(r.r * 2.0 - 1.0);
         if (r.g < 0.5) {
           // not significant: hatch the cell so only robust change reads as solid colour
-          // Stripes fixed to the surface, so they turn with the globe instead of sliding over it.
-          // Their spacing in degrees is a power of two chosen to stay near 8 pixels at any zoom.
+          // Thin lines fixed to the surface, so they turn with the globe instead of sliding over
+          // it, drawn over the cell so its colour can still be read. Spacing is
+          // a power of two in degrees; two neighbouring levels are cross-faded so nothing jumps
+          // while zooming.
           float hg = lon + lat;
           float hpx = max(fwidth(hg), 1e-6);
-          float hstep = exp2(floor(log2(hpx * 8.0) + 0.5));
-          float hw = hpx / hstep;
-          float h = smoothstep(0.5 - hw, 0.5 + hw, abs(fract(hg / hstep) - 0.5) * 2.0);
-          rc = mix(rc, base, 0.2 + 0.65 * h);
+          float lv = log2(hpx * 9.0 * uDpr);
+          float l0 = floor(lv);
+          float h = mix(hatchLines(hg, exp2(l0), hpx), hatchLines(hg, exp2(l0 + 1.0), hpx), smoothstep(0.5, 1.0, lv - l0));
+          // the lines are a darker shade of the cell itself: a grey patch would read as missing data
+          rc = mix(rc, rc * 0.42, 0.85 * h);
         }
         col = mix(col, rc, 0.94);
         col = mix(col, vec3(0.03), coast * 0.6);
@@ -391,6 +402,7 @@ export function earthUniformDefaults() {
     uSimRes: [64, 32],
     uSimOn: 0,
     uGrid: 1,
+    uDpr: 1,
   };
 }
 
